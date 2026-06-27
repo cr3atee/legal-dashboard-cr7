@@ -16,6 +16,7 @@ export function initReportsDerivedDataController() {
   const root = document.querySelector('[data-reports-root]');
   if (!root || state.initialized) return;
   state.initialized = true;
+  applyAutomaticReportCycle(root);
 
   const schedule = delay => scheduleRefresh(root, delay);
   root.addEventListener('submit', () => schedule(320), true);
@@ -34,6 +35,16 @@ export function initReportsDerivedDataController() {
   });
   state.observer.observe(root, { childList: true, subtree: true });
   schedule(500);
+}
+
+function applyAutomaticReportCycle(root) {
+  const now = new Date();
+  if (now.getMonth() !== 11 || now.getDate() < 30) return;
+  const yearInput = root.querySelector('[data-reports-year]');
+  const quarterInput = root.querySelector('[data-reports-quarter]');
+  const calendarYear = now.getFullYear();
+  if (yearInput && Number(yearInput.value || calendarYear) === calendarYear) yearInput.value = String(calendarYear + 1);
+  if (quarterInput && Number(quarterInput.value || 4) === 4) quarterInput.value = '1';
 }
 
 function scheduleRefresh(root, delay = 240) {
