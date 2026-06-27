@@ -12,10 +12,11 @@ async function scopeNames(dbPath, url) {
   if (url.searchParams.get('all') === '1') return [];
   const ids = String(url.searchParams.get('user_ids') || url.searchParams.get('user_id') || '')
     .split(',').map(Number).filter(Number.isFinite).filter(Boolean);
-  if (!ids.length) return [];
+  if (!ids.length) return ['__report_scope_not_resolved__'];
   const marks = ids.map(() => '?').join(',');
   const rows = await store.all(dbPath, `SELECT full_name FROM users WHERE id IN (${marks})`, ids).catch(() => []);
-  return rows.map(row => String(row.full_name || '').trim()).filter(Boolean);
+  const names = rows.map(row => String(row.full_name || '').trim()).filter(Boolean);
+  return names.length ? names : ['__report_scope_not_resolved__'];
 }
 
 async function handleReportMetrics(req, res, url, dbPath) {
