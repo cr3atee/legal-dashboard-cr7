@@ -1,7 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();
-const crypto = require('crypto');
 const REPORT_CATEGORIES = require('./reportCategories.cjs');
 
+const schemaReady = new Map();
+const BOOTSTRAP_KEY = 'report_event_ledger_bootstrap_v2';
 const MARKERS = [
   ['control_flag', 'Контрольное дело'],
   ['review_show_flag', 'Отзыв показать'],
@@ -47,7 +48,19 @@ function run(dbPath, sql, params = []) {
   });
 }
 
-async function ensureSchema(dbPath) {
+function ensureSchema(dbPath) {
+  if (!schemaReady.has(dbPath)) {
+    const promise = initializeSchema(dbPath).catch(error => {
+      schemaReady.delete(dbPath);
+      throw error;
+    });
+    schemaReady.set(dbPath, promise);
+  }
+  return schemaReady.get(dbPath);
+}
+
+async function initializeSchema(dbPath) {
+  await run(dbPath, 'CREATE TABLE IF NOT EXISTS schema_migrations (key TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)');
   await run(dbPath, `CREATE TABLE IF NOT EXISTS report_event_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
@@ -89,8 +102,9 @@ function validDate(year, month, day) {
   return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
 }
 
-function isoDate(value) {
-  const date = parseDate(value) || new Date();
+function isoDate(value, fallbackNow = true) {
+  const date = parseDate(value) || (fallbackNow ? new Date() : null);
+  if (!date) return '';
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
@@ -133,6 +147,11 @@ function flag(value) {
   return Number(value || 0) === 1 ? 1 : 0;
 }
 
+function isHearingCalculatorItem(item = {}) {
+  const text = String(item.title || item.kind || item.appeal_kind || '').toLowerCase();
+  return text.includes('заседан') || text.includes('слушан');
+}
+
 async function upsertEvent(dbPath, event) {
   const period = periodOf(event.event_date);
   const now = new Date().toISOString();
@@ -172,9 +191,7 @@ function caseMetadata(row, prosecutorFlag) {
 
 function appealKey(caseId, item, index) {
   const stable = String(item?.counter_id || item?.event_id || item?.id || '').trim();
-  if (stable) return `appeal:${caseId}:${stable}`;
-  const source = JSON.stringify({ title: item?.title || item?.kind || '', date: item?.date || item?.event_date || '', index });
-  return `appeal:${caseId}:${crypto.createHash('sha1').update(source).digest('hex')}`;
+  return `appeal:${caseId}:${stable || `legacy-${index + 1}`}`;
 }
 
 async function bootstrapCases(dbPath, rows, extraFlags) {
@@ -197,7 +214,7 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
     if (!Array.isArray(appeals)) continue;
     for (let index = 0; index < appeals.length; index += 1) {
       const item = appeals[index] || {};
-      if (!Object.values(item).some(value => String(value ?? '').trim())) continue;
+      if (isHearingCalculatorItem(item) || !Object.values(item).some(value => String(value ?? '').trim())) continue;
       await upsertEvent(dbPath, {
         event_type: 'appeal',
         source_key: appealKey(caseId, item, index),
@@ -209,7 +226,7 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
           general_case_id: caseId,
           kind: item.appeal_kind || item.kind || item.title || 'Обжалование',
           event_date: item.date || item.event_date || '',
-          counter_id: item.counter_id || ''
+          counter_id: item.counter_id || `legacy-${index + 1}`
         }
       });
     }
@@ -217,6 +234,8 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
 }
 
 async function bootstrap(dbPath) {
+  const migrated = await get(dbPath, 'SELECT key FROM schema_migrations WHERE key=?', [BOOTSTRAP_KEY]).catch(() => null);
+  if (migrated) return;
   const flagRows = await all(dbPath, 'SELECT general_case_id,prosecutor_claim_flag FROM general_case_extra_flags').catch(() => []);
   const extraFlags = new Map(flagRows.map(row => [Number(row.general_case_id), flag(row.prosecutor_claim_flag)]));
   await bootstrapCases(dbPath, await all(dbPath, 'SELECT * FROM general_cases').catch(() => []), extraFlags);
@@ -242,6 +261,7 @@ async function bootstrap(dbPath) {
       }
     });
   }
+  await run(dbPath, 'INSERT OR REPLACE INTO schema_migrations (key,applied_at) VALUES (?,?)', [BOOTSTRAP_KEY, new Date().toISOString()]);
 }
 
 function inScope(row, names) {
@@ -269,7 +289,7 @@ function executorRows(quarterCases, ytdCases) {
     if (!map.has(key)) map.set(key, { executor, categories: new Set(), quarter_count: 0, ytd_count: 0 });
     const item = map.get(key);
     item[field] += 1;
-    if (row.category) item.categories.add(row.category);
+    if (field === 'quarter_count' && row.category) item.categories.add(row.category);
   };
   ytdCases.forEach(row => add(row, 'ytd_count'));
   quarterCases.forEach(row => add(row, 'quarter_count'));
@@ -317,7 +337,7 @@ async function dayHearings(dbPath, reportDate, scopeNames) {
   const rows = await all(dbPath, `SELECT s.*,g.executor AS case_executor,g.case_no,g.court_no,g.claim_subject
     FROM court_schedule s LEFT JOIN general_cases g ON g.id=s.general_case_id
     WHERE COALESCE(s.is_date_row,0)=0 ORDER BY COALESCE(s.time,'') ASC,s.id ASC`).catch(() => []);
-  const key = isoDate(reportDate);
+  const key = isoDate(reportDate, false);
   return rows.map(row => ({
     id: row.id,
     session_date: row.session_date || row.hearing_date || '',
@@ -327,7 +347,7 @@ async function dayHearings(dbPath, reportDate, scopeNames) {
     representative: row.representative || row.case_executor || '',
     case_no: row.case_no || row.court_no || '',
     subject: row.result || row.claim_subject || ''
-  })).filter(row => isoDate(row.session_date) === key && inScope(row, scopeNames));
+  })).filter(row => key && isoDate(row.session_date, false) === key && inScope(row, scopeNames));
 }
 
 async function summary(dbPath, { year, quarter, reportDate, scopeNames }) {
