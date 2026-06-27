@@ -1,6 +1,10 @@
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
+import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
+import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
+import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.js';
+import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
@@ -12,6 +16,7 @@ import { initMeetingsPage } from './modules/meetings/meetingsController.js';
 import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js';
 import { initReportsPage } from './modules/reports/reportsController.js';
 import { initReportsDerivedDataController } from './modules/reports/reportsDerivedDataController.js';
+import { initReportsDayTasksOverlay } from './modules/reports/reportsDayTasksOverlay.js';
 import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
@@ -29,6 +34,10 @@ export function initApp() {
     initSidebarCollapse();
     initRouter();
     initDashboard();
+    initCaseUiEnhancements();
+    initAppealCalculatorUiFix();
+    initAppealTaskDateBridge();
+    initLegalFieldSuggestions();
     initGeneralCasesPage();
     initControlledCasesPage();
     initEnforcementPage();
@@ -40,6 +49,7 @@ export function initApp() {
     initMeetingsWorkflowUi();
     initReportsPage();
     initReportsDerivedDataController();
+    initReportsDayTasksOverlay();
     initAdminUsersPage();
     initAdminDictionariesPage();
     initMapFullscreenButton();
