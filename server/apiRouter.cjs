@@ -1,9 +1,11 @@
 const core = require('./sqliteApi.cjs');
 const { ensureReportMetricsSchema, handleReportMetrics } = require('./reportMetricsRoute.cjs');
 const { handleReportMetricsWrite } = require('./reportMetricsWriteRoute.cjs');
+const { ensureCaseSuggestionSeeds } = require('./caseSuggestionSeeds.cjs');
 
 async function ensureSchema(dbPath) {
   await core.ensureSchema(dbPath);
+  await ensureCaseSuggestionSeeds(dbPath);
   await ensureReportMetricsSchema(dbPath);
 }
 
