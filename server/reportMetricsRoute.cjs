@@ -7,6 +7,8 @@ function send(res, status, value) {
 }
 
 async function scopeNames(dbPath, url) {
+  const employee = String(url.searchParams.get('employee') || '').trim();
+  if (employee) return [employee];
   if (url.searchParams.get('all') === '1') return [];
   const ids = String(url.searchParams.get('user_ids') || url.searchParams.get('user_id') || '')
     .split(',').map(Number).filter(Number.isFinite).filter(Boolean);
