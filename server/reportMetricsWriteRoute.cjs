@@ -24,9 +24,10 @@ function read(req) {
   });
 }
 
-function isHearingAppeal(body = {}) {
+function shouldSkipAppeal(body = {}) {
   const text = String(body.metadata?.kind || body.kind || '').toLowerCase();
-  return text.includes('заседан') || text.includes('слушан');
+  if (text.includes('заседан') || text.includes('слушан')) return true;
+  return !String(body.metadata?.event_date || body.event_date_value || '').trim();
 }
 
 async function handleReportMetricsWrite(req, res, url, dbPath) {
@@ -63,8 +64,8 @@ async function handleReportMetricsWrite(req, res, url, dbPath) {
       send(res, 400, { error: 'invalid_event' });
       return true;
     }
-    if (eventType === 'appeal' && isHearingAppeal(body)) {
-      send(res, 200, { ok: true, skipped: 'hearing_calculator_item' });
+    if (eventType === 'appeal' && shouldSkipAppeal(body)) {
+      send(res, 200, { ok: true, skipped: 'not_a_dated_appeal' });
       return true;
     }
     await store.registerEvent(dbPath, {
