@@ -1,0 +1,147 @@
+/* Final employee-card layout: two cards per row without horizontal collisions. */
+.reports-redesign-view .reports-employee-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: start;
+  gap: 16px;
+}
+
+.reports-redesign-view .reports-employee-grid.is-single {
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: stretch;
+}
+
+.reports-redesign-view .reports-employee-card {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-card {
+  gap: 15px;
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-head {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-identity,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-title-block,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-middle,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-section,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-main > div,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-task-metric-card > span {
+  min-width: 0;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-avatar {
+  width: 52px;
+  height: 52px;
+  flex-basis: 52px;
+  border-radius: 16px;
+  font-size: 17px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-head h4 {
+  font-size: clamp(19px, 1.6vw, 24px);
+  overflow-wrap: anywhere;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-overdue-summary {
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  flex: none;
+  padding: 12px 15px;
+  border-radius: 16px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-overdue-summary strong {
+  font-size: 26px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-middle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-card,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-hearings-card {
+  min-height: 0;
+  padding: 17px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-main {
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-main strong {
+  font-size: clamp(22px, 2vw, 28px);
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-percent {
+  width: 58px;
+  height: 58px;
+  flex-basis: 58px;
+  font-size: 17px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-progress,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-plan-stats {
+  margin-top: 17px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-hearings-empty,
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-task-empty {
+  min-height: 132px;
+  padding: 14px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-tasks-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-task-metric-card {
+  min-width: 0;
+  min-height: 94px;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 17px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-task-metric-card strong {
+  min-width: 44px;
+  font-size: 28px;
+}
+
+.reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-note {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 820px) {
+  .reports-redesign-view .reports-employee-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .reports-redesign-view .reports-employee-grid:not(.is-single) .reports-employee-tasks-row,
+  .reports-redesign-view .reports-employee-tasks-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
