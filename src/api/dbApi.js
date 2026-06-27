@@ -81,6 +81,151 @@ function reportsQuery(params = {}) {
   return value ? `?${value}` : '';
 }
 
+function caseFormSnapshot(data = {}) {
+  const form = document.querySelector('[data-general-form]');
+  const category = String(form?.elements?.category?.value || data.category || '').trim();
+  const prosecutorClaim = form?.elements?.prosecutor_claim_flag?.checked
+    ? 1
+    : Number(data.prosecutor_claim_flag || 0) === 1 ? 1 : 0;
+  return { category, prosecutorClaim };
+}
+
+function parseAppeals(value) {
+  try {
+    const rows = typeof value === 'string' ? JSON.parse(value || '[]') : value;
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function randomMetricId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function normalizeAppealsForCounter(value) {
+  return parseAppeals(value).map(row => ({
+    ...row,
+    counter_id: row?.counter_id || randomMetricId(),
+    counter_created_at: row?.counter_created_at || new Date().toISOString()
+  }));
+}
+
+function prepareCasePayload(data = {}) {
+  const snapshot = caseFormSnapshot(data);
+  const appeals = normalizeAppealsForCounter(data.appeals_json);
+  return {
+    payload: {
+      ...data,
+      category: snapshot.category,
+      prosecutor_claim_flag: snapshot.prosecutorClaim,
+      appeals_json: JSON.stringify(appeals)
+    },
+    prosecutorClaim: snapshot.prosecutorClaim,
+    appeals
+  };
+}
+
+async function saveCaseExtraFlag(caseId, prosecutorClaim) {
+  return request('/api/case-extra-flags', {
+    method: 'POST',
+    body: JSON.stringify({ general_case_id: caseId, prosecutor_claim_flag: prosecutorClaim })
+  });
+}
+
+async function registerMetricEvent(event) {
+  try {
+    return await request('/api/report-metric-events', { method: 'POST', body: JSON.stringify(event) });
+  } catch (error) {
+    console.warn('Не удалось зарегистрировать событие отчёта:', error);
+    return null;
+  }
+}
+
+async function registerCaseMetrics(saved, prepared) {
+  const id = Number(saved?.id || prepared.payload.id || 0);
+  if (!id) return;
+  await saveCaseExtraFlag(id, prepared.prosecutorClaim).catch(error => console.warn('Не удалось сохранить пометку иска прокурора:', error));
+  await registerMetricEvent({
+    event_type: 'case',
+    source_key: `case:${id}`,
+    event_date: saved?.created_at || prepared.payload.created_at || prepared.payload.registration_date || new Date().toISOString(),
+    employee: saved?.executor || prepared.payload.executor || '',
+    category: saved?.category || prepared.payload.category || '',
+    subject: saved?.claim_subject || prepared.payload.claim_subject || '',
+    metadata: {
+      general_case_id: id,
+      case_no: saved?.case_no || prepared.payload.case_no || '',
+      control_flag: Number(prepared.payload.control_flag || 0),
+      attendance_flag: Number(prepared.payload.attendance_flag || 0),
+      review_show_flag: Number(prepared.payload.review_show_flag || 0),
+      emergency_fund_flag: Number(prepared.payload.emergency_fund_flag || 0),
+      registry_flag: Number(prepared.payload.registry_flag || 0),
+      prosecutor_claim_flag: prepared.prosecutorClaim
+    }
+  });
+  for (const appeal of prepared.appeals) {
+    await registerMetricEvent({
+      event_type: 'appeal',
+      source_key: `appeal:${id}:${appeal.counter_id}`,
+      event_date: appeal.counter_created_at,
+      employee: saved?.executor || prepared.payload.executor || '',
+      category: saved?.category || prepared.payload.category || '',
+      subject: saved?.claim_subject || prepared.payload.claim_subject || '',
+      metadata: {
+        general_case_id: id,
+        counter_id: appeal.counter_id,
+        kind: appeal.appeal_kind || appeal.kind || appeal.title || 'Обжалование',
+        event_date: appeal.date || appeal.event_date || ''
+      }
+    });
+  }
+}
+
+async function registerHearingMetric(row = {}, fallback = {}) {
+  const id = Number(row.id || row.schedule_id || 0);
+  if (!id) return;
+  await registerMetricEvent({
+    event_type: 'hearing',
+    source_key: `hearing:${id}`,
+    event_date: row.created_at || fallback.created_at || new Date().toISOString(),
+    employee: row.representative || row.case_executor || fallback.representative || fallback.executor || '',
+    category: row.category || fallback.category || '',
+    subject: row.result || row.claim_subject || fallback.subject || fallback.result || '',
+    metadata: {
+      schedule_id: id,
+      session_date: row.session_date || row.hearing_date || fallback.session_date || fallback.hearing_date || fallback.date || '',
+      court: row.court || fallback.court || '',
+      time: row.time || row.time_val || fallback.time || fallback.time_val || '',
+      general_case_id: row.general_case_id || fallback.general_case_id || null
+    }
+  });
+}
+
+async function mergeCaseExtraFlags(rows = [], archived = false) {
+  const payload = await request('/api/case-extra-flags').catch(() => ({ items: [] }));
+  const flags = new Map((payload.items || []).map(row => [Number(row.general_case_id), Number(row.prosecutor_claim_flag || 0)]));
+  return rows.map(row => ({
+    ...row,
+    prosecutor_claim_flag: flags.get(Number(archived ? row.source_id : row.id)) || 0
+  }));
+}
+
+async function createGeneralCase(data) {
+  const prepared = prepareCasePayload(data);
+  const saved = await request('/api/general-cases', { method: 'POST', body: JSON.stringify(prepared.payload) });
+  await registerCaseMetrics(saved, prepared);
+  return { ...saved, prosecutor_claim_flag: prepared.prosecutorClaim };
+}
+
+async function updateGeneralCase(id, data) {
+  const prepared = prepareCasePayload({ ...data, id });
+  const saved = await request(`/api/general-cases/${id}`, { method: 'PUT', body: JSON.stringify(prepared.payload) });
+  await registerCaseMetrics(saved, prepared);
+  return { ...saved, prosecutor_claim_flag: prepared.prosecutorClaim };
+}
+
 export const dbApi = {
   health: () => request('/api/health'),
   getCurrentSession: () => request('/api/auth/me'),
@@ -98,16 +243,18 @@ export const dbApi = {
   markNotificationsRead: keys => request('/api/notifications/read', { method: 'POST', body: JSON.stringify({ keys }) }),
 
   getReportsSummary: (params = {}) => request(`/api/reports/summary${reportsQuery(params)}`),
+  getReportMetrics: (params = {}) => request(`/api/report-metrics${reportsQuery(params)}`),
   getReportUsers: () => request('/api/reports/users'),
   getQuarterlyReports: (params = {}) => request(`/api/reports/quarterly${reportsQuery(params)}`),
   uploadQuarterlyReport: data => request('/api/reports/quarterly', { method: 'POST', body: JSON.stringify(data) }),
   downloadQuarterlyReport: id => requestBlob(`/api/reports/quarterly/${id}/download`),
   openQuarterlyReport: id => request(`/api/reports/quarterly/${id}/open`, { method: 'POST', body: '{}' }),
 
-  getGeneralCases: ({ search = '' } = {}) => request(`/api/general-cases${search ? `?search=${encodeURIComponent(search)}` : ''}`),
-  getArchivedGeneralCases: ({ search = '' } = {}) => request(`/api/general-cases?archived=1${search ? `&search=${encodeURIComponent(search)}` : ''}`),
-  createGeneralCase: data => request('/api/general-cases', { method: 'POST', body: JSON.stringify(data) }),
-  updateGeneralCase: (id, data) => request(`/api/general-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getGeneralCases: async ({ search = '' } = {}) => mergeCaseExtraFlags(await request(`/api/general-cases${search ? `?search=${encodeURIComponent(search)}` : ''}`)),
+  getArchivedGeneralCases: async ({ search = '' } = {}) => mergeCaseExtraFlags(await request(`/api/general-cases?archived=1${search ? `&search=${encodeURIComponent(search)}` : ''}`), true),
+  createGeneralCase,
+  updateGeneralCase,
+  saveGeneralCaseExtraFlag: saveCaseExtraFlag,
   uploadGeneralCaseDocument: data => request('/api/general-case-files', { method: 'POST', body: JSON.stringify(data) }),
   previewGeneralCaseDocument: filePath => requestBlob(`/api/general-case-files/preview?path=${encodeURIComponent(filePath)}`),
   openGeneralCaseDocument: filePath => request('/api/general-case-files/open', { method: 'POST', body: JSON.stringify({ path: filePath }) }),
@@ -120,7 +267,11 @@ export const dbApi = {
   archiveGeneralCase: id => request(`/api/general-cases/${id}`, { method: 'DELETE' }),
   restoreGeneralCase: archiveId => request(`/api/general-cases/archive/${archiveId}/restore`, { method: 'POST' }),
   createControlledFromGeneral: (id, history_text = '') => request(`/api/general-cases/${id}/controlled-link`, { method: 'POST', body: JSON.stringify({ history_text }) }),
-  addGeneralCaseAttendance: (id, data) => request(`/api/general-cases/${id}/attendance-hearing`, { method: 'POST', body: JSON.stringify(data) }),
+  addGeneralCaseAttendance: async (id, data) => {
+    const result = await request(`/api/general-cases/${id}/attendance-hearing`, { method: 'POST', body: JSON.stringify(data) });
+    await registerHearingMetric(result.schedule || {}, { ...data, general_case_id: id });
+    return result;
+  },
 
   getControlledCases: ({ search = '' } = {}) => request(`/api/controlled-cases${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   getArchivedControlledCases: () => request('/api/controlled-cases/archive'),
@@ -129,7 +280,6 @@ export const dbApi = {
   archiveControlledCase: id => request(`/api/controlled-cases/${id}`, { method: 'DELETE' }),
   restoreControlledCase: archiveId => request(`/api/controlled-cases/archive/${archiveId}/restore`, { method: 'POST' }),
   deleteControlledArchiveCase: archiveId => request(`/api/controlled-cases/archive/${archiveId}`, { method: 'DELETE' }),
-
 
   getEnforcement: (mode = 'debtor') => request(`/api/enforcement?mode=${encodeURIComponent(mode)}`),
   getArchivedEnforcement: (mode = 'debtor') => request(`/api/enforcement/archive?mode=${encodeURIComponent(mode)}`),
@@ -166,8 +316,16 @@ export const dbApi = {
 
   getCourtSchedule: () => request('/api/court-schedule'),
   createCourtScheduleDate: data => request('/api/court-schedule/date', { method: 'POST', body: JSON.stringify(data) }),
-  createCourtScheduleCase: data => request('/api/court-schedule/case', { method: 'POST', body: JSON.stringify(data) }),
-  updateCourtSchedule: (id, data) => request(`/api/court-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createCourtScheduleCase: async data => {
+    const result = await request('/api/court-schedule/case', { method: 'POST', body: JSON.stringify(data) });
+    await registerHearingMetric(result, data);
+    return result;
+  },
+  updateCourtSchedule: async (id, data) => {
+    const result = await request(`/api/court-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    await registerHearingMetric(result, data);
+    return result;
+  },
   deleteCourtSchedule: id => request(`/api/court-schedule/${id}`, { method: 'DELETE' }),
 
   getCalendarTasks: ({ date = '', start = '', end = '', user = '', generalCaseId = '' } = {}) => {
