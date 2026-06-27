@@ -12,6 +12,7 @@ import { initMeetingsPage } from './modules/meetings/meetingsController.js';
 import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js';
 import { initReportsPage } from './modules/reports/reportsController.js';
 import { initReportsCompatibilityController } from './modules/reports/reportsCompatibilityController.js';
+import { initReportsQuarterReferenceController } from './modules/reports/reportsQuarterReferenceController.js';
 import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
@@ -40,6 +41,7 @@ export function initApp() {
     initMeetingsWorkflowUi();
     initReportsPage();
     initReportsCompatibilityController();
+    initReportsQuarterReferenceController();
     initAdminUsersPage();
     initAdminDictionariesPage();
     initMapFullscreenButton();
