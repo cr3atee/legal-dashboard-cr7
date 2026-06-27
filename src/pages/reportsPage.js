@@ -59,7 +59,7 @@ export function renderReportsPage() {
           <select multiple data-reports-users hidden></select>
           <input type="checkbox" data-reports-all-users checked hidden>
 
-          <button class="btn primary" type="submit">Показать</button>
+          <button class="btn primary reports-show-btn" type="submit">Показать</button>
           <button class="btn ghost" type="button" data-reports-reset>Сбросить</button>
         </form>
       </article>

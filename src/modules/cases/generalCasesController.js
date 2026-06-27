@@ -1527,8 +1527,8 @@ function renderCaseCard(row) {
 
         <div class="general-case-card-date-corner">${calendarIcon()}<span>${formatInline(row.registration_date, '—')}</span></div>
 
-        <button class="general-case-expand-toggle" data-general-card-toggle="${row.id}" type="button" aria-label="${expanded ? 'Свернуть карточку' : 'Раскрыть карточку'}">
-          <span aria-hidden="true">${expanded ? chevronUpIcon() : chevronDownIcon()}</span>
+        <button class="general-case-expand-toggle general-case-more-toggle" data-general-card-toggle="${row.id}" type="button" title="Подробнее" aria-label="Подробнее" aria-expanded="${expanded ? 'true' : 'false'}">
+          <span aria-hidden="true">•••</span>
         </button>
       </div>
     </article>
@@ -1570,8 +1570,10 @@ function printPreviewIcon() {
 function renderRelatedOpenButton(row, variant = 'card') {
   const destinations = getGeneralRelatedDestinations(row);
   if (!destinations.length || state.archived) return '';
-  const className = variant === 'table' ? 'btn small general-related-open-table' : 'btn small general-related-open-card';
-  return `<button class="${className}" data-general-related-open="${row.id}" type="button">Подробнее</button>`;
+  if (variant === 'table') {
+    return `<button class="btn small general-related-open-table" data-general-related-open="${row.id}" type="button">Подробнее</button>`;
+  }
+  return `<button class="general-related-open-card general-card-dots-button" data-general-related-open="${row.id}" type="button" title="Подробнее" aria-label="Подробнее"><span aria-hidden="true">•••</span></button>`;
 }
 
 function getGeneralRelatedDestinations(row) {
@@ -1636,8 +1638,14 @@ function openGeneralRelatedDestinations(id) {
 
 function openGeneralRelatedDestination(row, destination) {
   if (!destination?.view) return;
+  const navButton = document.querySelector(`[data-view="${destination.view}"]`);
+  const viewNode = document.getElementById(destination.view);
+  if (!navButton && !viewNode) {
+    showNotification?.('Связанный раздел недоступен в текущем интерфейсе.', 'error');
+    return;
+  }
   if (typeof window.openView === 'function') window.openView(destination.view);
-  else document.querySelector(`[data-view="${destination.view}"]`)?.click();
+  else navButton?.click();
 
   if (destination.key === 'emergency') {
     window.setTimeout(() => {

@@ -28,6 +28,9 @@ const state = {
   latestStructureRows: [],
   latestCategoryRows: [],
   latestOverdueTasksByUser: new Map(),
+  latestRemainingTasksByUser: new Map(),
+  openOverdueUserKey: '',
+  openTaskListKind: '',
 };
 
 export function initReportsPage() {
@@ -165,10 +168,12 @@ function bindEvents(root) {
       return;
     }
 
-    const overdueTask = event.target.closest('[data-reports-overdue-task]');
-    if (overdueTask) {
-      openGeneralCaseFromReport(overdueTask.dataset.reportsOverdueTask);
+    const remainingButton = event.target.closest('[data-reports-remaining-user]');
+    if (remainingButton) {
+      openRemainingTasksDialog(remainingButton.dataset.reportsRemainingUser || '');
+      return;
     }
+
   });
 
   document.addEventListener('click', event => {
@@ -265,6 +270,7 @@ async function loadReports() {
     state.availableUsers = data.scope?.available_users || state.availableUsers;
     renderManagerFilters(root, data.scope || {});
     renderReport(root, data || {});
+    restorePendingOverdueContext(root);
     setStatus('');
   } catch (error) {
     setStatus(`Не удалось получить данные отчёта. Техническая причина: ${error.message || 'ошибка API'}.`, true);
@@ -442,6 +448,7 @@ function renderEmployeeCards(root, employees) {
   const node = root.querySelector('[data-reports-employee-cards]');
   if (!node) return;
   state.latestOverdueTasksByUser = new Map();
+  state.latestRemainingTasksByUser = new Map();
   node.classList.toggle('is-single', employees.length === 1);
   node.innerHTML = employees.length
     ? employees.map(employee => renderEmployeeCard(employee)).join('')
@@ -455,66 +462,154 @@ function renderEmployeeCard(employee) {
   const hearings = getTaskRows(employee, ['hearings', 'day_hearings']);
   const totalTasks = firstNumber(employee.total_tasks, employee.tasks_total, doneTasks.length + remainingTasks.length);
   const completedTasks = firstNumber(employee.completed_tasks_count, employee.done_tasks_count, employee.tasks_done, doneTasks.length);
-  const overdueTasks = firstNumber(employee.overdue_tasks, employee.overdue_tasks_count, 0);
+  const remainingRows = getRemainingTaskRows(employee, remainingTasks);
   const overdueRows = getOverdueTaskRows(employee, remainingTasks);
+  const overdueTasks = Math.max(
+    firstNumber(employee.overdue_tasks, employee.overdue_tasks_count, overdueRows.length) || 0,
+    overdueRows.length
+  );
   const employeeKey = getEmployeeKey(employee);
   state.latestOverdueTasksByUser.set(employeeKey, overdueRows);
-  const nearest = employee.next_hearing || employee.nearest_hearing || getNearestFutureHearing(hearings);
+  state.latestRemainingTasksByUser.set(employeeKey, remainingRows);
+  const name = employee.user_name || employee.full_name || employee.name || 'Сотрудник';
+  const safeTotal = Math.max(0, Number(totalTasks || 0));
+  const safeCompleted = Math.max(0, Number(completedTasks || 0));
+  const remainingCount = Math.max(remainingRows.length, safeTotal - safeCompleted, 0);
+  const progress = safeTotal ? Math.max(0, Math.min(100, Math.round((safeCompleted / safeTotal) * 100))) : 0;
+  const updated = formatEmployeeUpdatedAt(employee);
 
   return `
     <article class="reports-employee-card status-${status.level}">
       <div class="reports-employee-head">
-        <div>
-          <h4>${escapeHtml(employee.user_name || employee.full_name || employee.name || 'Сотрудник')}</h4>
-          <button class="reports-status-chip" type="button" title="${escapeHtml(STATUS_LEGEND)}" aria-label="${escapeHtml(status.text)}. ${escapeHtml(STATUS_LEGEND)}">
-            <span aria-hidden="true"></span>
-            ${escapeHtml(status.text)}
-          </button>
+        <div class="reports-employee-identity">
+          <div class="reports-employee-avatar" aria-hidden="true">${escapeHtml(getInitials(name))}</div>
+          <div class="reports-employee-title-block">
+            <h4>${escapeHtml(name)}</h4>
+            <div class="reports-employee-meta">
+              <button class="reports-status-chip" type="button" title="${escapeHtml(STATUS_LEGEND)}" aria-label="${escapeHtml(status.text)}. ${escapeHtml(STATUS_LEGEND)}">
+                <span aria-hidden="true"></span>
+                ${escapeHtml(status.text)}
+              </button>
+              ${updated ? `<span class="reports-employee-updated">${escapeHtml(updated)}</span>` : ''}
+            </div>
+          </div>
         </div>
-        <p>${status.reasons.map(escapeHtml).join('<br>')}</p>
+        <button class="reports-overdue-summary ${overdueTasks > 2 ? 'is-critical' : ''}" data-reports-overdue-user="${escapeAttr(employeeKey)}" type="button" aria-label="Открыть просроченные задачи сотрудника ${escapeAttr(name)}">
+          <span>
+            <b>Просроченные задачи</b>
+            <small>Открыть список →</small>
+          </span>
+          <strong>${formatMaybeNumber(overdueTasks)}</strong>
+        </button>
       </div>
 
-      <section class="reports-employee-section">
-        <h5>Выполнение плана</h5>
-        <strong>${formatMaybeNumber(completedTasks)}/${formatMaybeNumber(totalTasks)} задач выполнено</strong>
-        <div class="reports-task-columns">
-          <div>
-            <span>Выполнено:</span>
-            ${renderCompactList(doneTasks, 'Выполненных задач нет.')}
-          </div>
-          <div>
-            <span>Осталось выполнить:</span>
-            ${renderCompactList(remainingTasks, 'Оставшихся задач нет.')}
-          </div>
-        </div>
-      </section>
+      <hr class="reports-employee-divider">
 
-      <section class="reports-employee-section">
-        <h5>Судебные заседания</h5>
-        ${hearings.length ? hearings.map(row => `
-          <div class="reports-hearing-chip ${row.conflict || row.has_conflict ? 'is-conflict' : ''}">
-            <b>${escapeHtml(row.time || row.start_time || '—')}</b>
-            <span>${escapeHtml(row.court || 'Суд не указан')}</span>
-            <small>${escapeHtml(row.subject || row.claim_subject || row.result || 'Предмет не указан')} · ${escapeHtml(row.case_no || row.court_no || row.case_number || 'Дело не указано')}</small>
-            ${(row.conflict || row.has_conflict) ? '<em>Конфликт</em>' : ''}
+      <div class="reports-employee-middle">
+        <section class="reports-employee-section reports-plan-card">
+          <h5>Выполнение плана</h5>
+          <div class="reports-plan-main">
+            <div>
+              <strong>${formatMaybeNumber(safeCompleted)} из ${formatMaybeNumber(safeTotal)} задач</strong>
+              <p>Выполнено ${progress}% за выбранный период</p>
+            </div>
+            <span class="reports-plan-percent">${progress}%</span>
           </div>
-        `).join('') : '<div class="reports-empty compact">Заседаний нет.</div>'}
-      </section>
+          <div class="reports-plan-progress" aria-hidden="true"><span style="width:${progress}%"></span></div>
+          <div class="reports-plan-stats">
+            <div><span>Выполнено</span><strong>${formatMaybeNumber(safeCompleted)}</strong></div>
+            <div><span>Осталось</span><strong>${formatMaybeNumber(remainingCount)}</strong></div>
+          </div>
+        </section>
 
-      <section class="reports-employee-bottom">
-        <div>
-          <span>Ближайшее заседание</span>
-          <strong>${escapeHtml(formatNearestHearing(nearest))}</strong>
+        <section class="reports-employee-section reports-hearings-card">
+          <div class="reports-section-title-row">
+            <h5>Судебные заседания сегодня</h5>
+            <span>${formatMaybeNumber(hearings.length)}</span>
+          </div>
+          ${hearings.length ? renderEmployeeHearings(hearings) : `
+            <div class="reports-hearings-empty">
+              <i aria-hidden="true">⚖</i>
+              <strong>На сегодня заседаний нет</strong>
+              <p>Заседания выбранного сотрудника появятся здесь</p>
+            </div>
+          `}
+        </section>
+      </div>
+
+      <div class="reports-employee-tasks-row">
+        <div class="reports-task-metric-card is-done" aria-label="Выполненные задачи">
+          <span>
+            <b>Выполнено</b>
+            <small>за выбранный период</small>
+          </span>
+          <strong>${formatMaybeNumber(safeCompleted)}</strong>
         </div>
-        <button class="${overdueTasks > 2 ? 'is-critical' : ''}" data-reports-overdue-user="${escapeAttr(employeeKey)}" type="button">
-          <span>Просроченные задачи</span>
-          <strong>${formatMaybeNumber(overdueTasks)}${overdueTasks > 2 ? ' · Критично' : ''}</strong>
+
+        <button class="reports-task-metric-card is-remaining" data-reports-remaining-user="${escapeAttr(employeeKey)}" type="button" aria-label="Открыть оставшиеся задачи сотрудника ${escapeAttr(name)}">
+          <span>
+            <b>Осталось выполнить</b>
+            <small>Открыть список</small>
+          </span>
+          <strong>${formatMaybeNumber(remainingCount)}</strong>
         </button>
-      </section>
+      </div>
+
+      <div class="reports-employee-note">
+        <span>Ключевые показатели видны сразу, а задачи сгруппированы по смыслу</span>
+      </div>
     </article>
   `;
 }
 
+function getInitials(name = '') {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('');
+}
+
+function formatEmployeeUpdatedAt(employee = {}) {
+  const value = employee.updated_at || employee.report_updated_at || employee.last_updated_at || '';
+  if (!value) return '';
+  return `Обновлено ${formatDateTime(value)}`;
+}
+
+function renderEmployeeHearings(rows = []) {
+  return `<div class="reports-hearing-list">${rows.map(row => `
+    <div class="reports-hearing-chip ${row.conflict || row.has_conflict ? 'is-conflict' : ''}">
+      <b>${escapeHtml(row.time || row.start_time || '—')}</b>
+      <span>${escapeHtml(row.court || row.court_name || 'Суд не указан')}</span>
+      <small>${escapeHtml([row.subject || row.claim_subject || row.result || '', row.case_no || row.court_no || row.case_number || ''].filter(Boolean).join(' · ') || 'Данные дела не указаны')}</small>
+      ${(row.conflict || row.has_conflict) ? '<em>Конфликт</em>' : ''}
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderEmployeeTaskRows(rows = [], emptyText = 'Задач нет', mode = 'remaining') {
+  if (!rows.length) {
+    return `<div class="reports-task-empty">${escapeHtml(emptyText)}</div>`;
+  }
+  return `<div class="reports-task-list">${rows.map(row => {
+    const title = row.description || row.desc || row.assignment || row.task_type || row.type || row.subject || 'Задача';
+    const due = getTaskDueLabel(row, mode);
+    return `
+      <div class="reports-task-row" title="${escapeAttr(title)}">
+        <strong>${escapeHtml(title)}</strong>
+        ${due}
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+function getTaskDueLabel(row = {}, mode = 'remaining') {
+  if (mode === 'done') return '<span class="reports-task-date is-done">Выполнено</span>';
+  const key = normalizeReportDateKey(row.date_str || row.date || row.deadline || row.due_date || '');
+  const selected = normalizeReportDateKey(state.date || todayIso());
+  if (key && key < selected) return '<span class="reports-task-date is-overdue">Просрочено</span>';
+  if (key && key === selected) return '<span class="reports-task-date is-today">Сегодня</span>';
+  const label = key ? formatDate(key) : '';
+  return label ? `<span class="reports-task-date">до ${escapeHtml(label)}</span>` : '<span class="reports-task-date">срок не указан</span>';
+}
 function renderCriticalPoints(root, rows) {
   const node = root.querySelector('[data-reports-critical]');
   if (!node) return;
@@ -530,10 +625,10 @@ function renderCriticalPoints(root, rows) {
 function renderTimeline(root, employees, hearings) {
   const node = root.querySelector('[data-reports-timeline]');
   if (!node) return;
-  const sourceHearings = filterTimelineHearings(hearings);
+  const sourceHearings = uniqueTimelineHearings(filterTimelineHearings(hearings));
   const sourceEmployees = buildTimelineSourceEmployees(employees, sourceHearings);
   if (!sourceEmployees.length) {
-    node.innerHTML = emptyState('Нет заседаний для построения графика.');
+    node.innerHTML = emptyState('На выбранную дату судебных заседаний нет');
     return;
   }
 
@@ -558,11 +653,12 @@ function renderTimeline(root, employees, hearings) {
             ${employeeHearings.map(row => {
               const value = parseTimeMinutes(row.time || row.start_time);
               const left = value === null ? 0 : Math.max(0, Math.min(100, ((value - start) / span) * 100));
+              const details = formatTimelineHearingDetails(row, employee);
               return `
                 <span class="reports-timeline-item ${row.conflict || row.has_conflict ? 'is-conflict' : ''}" style="left:${left}%">
                   <b>${escapeHtml(row.time || row.start_time || '—')}</b>
-                  ${escapeHtml(row.court || 'Суд')}
-                  <small>${escapeHtml(row.subject || row.claim_subject || row.result || '')}</small>
+                  ${escapeHtml(row.court || row.court_name || 'Суд')}
+                  <small>${escapeHtml(details)}</small>
                 </span>
               `;
             }).join('')}
@@ -574,16 +670,17 @@ function renderTimeline(root, employees, hearings) {
 }
 
 function buildTimelineSourceEmployees(employees = [], hearings = []) {
-  if (!employees.length) return buildTimelineEmployees(hearings);
+  const employeeRows = employees.length ? employees : getSelectedReportUsersForTimeline();
+  if (!employeeRows.length) return buildTimelineEmployees(hearings);
 
-  const rows = employees
+  const rows = employeeRows
     .map(employee => {
       const currentHearings = getTaskRows(employee, ['hearings', 'day_hearings']);
       if (currentHearings.length) {
-        return { ...employee, hearings: filterTimelineHearings(currentHearings) };
+        return { ...employee, hearings: uniqueTimelineHearings(filterTimelineHearings(currentHearings)) };
       }
       const name = employee.user_name || employee.full_name || employee.name || employee.representative || '';
-      const matchedHearings = hearings.filter(row => matchesPerson(row, name));
+      const matchedHearings = hearings.filter(row => matchesPerson(row, name, employee));
       return { ...employee, hearings: matchedHearings };
     })
     .filter(employee => getTaskRows(employee, ['hearings', 'day_hearings']).length);
@@ -595,11 +692,41 @@ function filterTimelineHearings(rows = []) {
   const selectedDate = normalizeReportDateKey(state.date || todayIso());
   return (rows || []).filter(row => {
     const rowDate = normalizeReportDateKey(
-      row.session_date || row.hearing_date || row.date || row.date_str || row.datetime || row.created_at
+      row.session_date || row.hearing_date || row.hearingDate || row.event_date || row.date || row.date_str || row.datetime
     );
     if (!rowDate) return true;
     return rowDate === selectedDate;
   });
+}
+
+function uniqueTimelineHearings(rows = []) {
+  const seen = new Set();
+  return (rows || []).filter(row => {
+    const key = [
+      row.id || row.schedule_id || row.hearing_id,
+      row.general_case_id || row.case_id,
+      row.session_date || row.hearing_date || row.hearingDate || row.event_date || row.date || row.date_str || row.datetime,
+      row.time || row.start_time,
+      row.court || row.court_name,
+      row.representative || row.employee || row.case_executor,
+    ].map(value => String(value || '').trim()).join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getSelectedReportUsersForTimeline() {
+  if (state.allUsers || !state.selectedUserIds.length) return [];
+  const selectedIds = new Set(state.selectedUserIds.map(Number));
+  return state.availableUsers.filter(user => selectedIds.has(Number(user.id || user.user_id)));
+}
+
+function formatTimelineHearingDetails(row = {}, employee = {}) {
+  const employeeName = employee.user_name || employee.full_name || employee.name || getPrimaryPersonName(row);
+  const caseNumber = row.case_number || row.case_no || row.court_case_number || row.pk_number || row.general_case_number || '';
+  const subject = row.subject || row.claim_subject || row.result || row.description || row.desc || '';
+  return [employeeName, caseNumber, subject].filter(Boolean).join(' · ');
 }
 
 function renderControlled(root, rows) {
@@ -643,18 +770,47 @@ function getEmployeeKey(employee = {}) {
 
 function getOverdueTaskRows(employee = {}, remainingTasks = []) {
   const direct = getTaskRows(employee, ['overdue_tasks_list', 'overdue_task_rows', 'expired_tasks']);
-  if (direct.length) return direct;
+  if (direct.length) return uniqueOverdueTaskRows(direct.filter(isActiveOverdueTask));
   const selectedDate = String(state.date || todayIso());
-  return (remainingTasks || []).filter(task => {
+  return uniqueOverdueTaskRows((remainingTasks || []).filter(task => {
     const dateValue = String(task.date_str || task.date || task.deadline || task.due_date || '').slice(0, 10);
     if (!dateValue) return false;
-    return dateValue < selectedDate && Number(task.done || task.completed || 0) !== 1;
+    return normalizeReportDateKey(dateValue) < selectedDate && isActiveOverdueTask(task);
+  }));
+}
+
+function getRemainingTaskRows(employee = {}, remainingTasks = []) {
+  const direct = getTaskRows(employee, ['remaining_tasks', 'open_tasks_list', 'open_tasks']);
+  const rows = direct.length ? direct : remainingTasks;
+  return uniqueOverdueTaskRows((rows || []).filter(isActiveOverdueTask));
+}
+
+function isActiveOverdueTask(task = {}) {
+  if (Number(task.done || task.completed || task.is_done || 0) === 1) return false;
+  const status = String(task.status || task.state || '').toLowerCase();
+  return !['done', 'completed', 'cancelled', 'canceled', 'deleted', 'выполнено', 'отменено', 'удалено'].includes(status);
+}
+
+function uniqueOverdueTaskRows(rows = []) {
+  const seen = new Set();
+  return rows.filter(row => {
+    const key = [
+      row.id,
+      row.general_case_id || row.case_id,
+      row.description || row.desc || row.assignment || row.title,
+      row.deadline || row.due_date || row.date || row.date_str,
+    ].map(value => String(value || '').trim()).join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
 function openOverdueTasksDialog(userKey = '') {
   const root = document.querySelector('[data-reports-root]');
   if (!root) return;
+  state.openOverdueUserKey = String(userKey || '').trim();
+  state.openTaskListKind = 'overdue';
   const tasks = state.latestOverdueTasksByUser.get(String(userKey || '').trim()) || [];
   let dialog = root.querySelector('[data-reports-overdue-dialog]');
   if (!dialog) {
@@ -685,33 +841,154 @@ function openOverdueTasksDialog(userKey = '') {
     const task = event.target.closest('[data-reports-overdue-task]');
     if (task) {
       dialog.close();
-      openGeneralCaseFromReport(task.dataset.reportsOverdueTask);
+      openGeneralCaseFromReport(task.dataset.reportsOverdueTask, userKey, 'overdue');
+    }
+  }, { once: true });
+  if (!dialog.open) dialog.showModal();
+}
+
+function openRemainingTasksDialog(userKey = '') {
+  const root = document.querySelector('[data-reports-root]');
+  if (!root) return;
+  state.openOverdueUserKey = String(userKey || '').trim();
+  state.openTaskListKind = 'remaining';
+  const tasks = state.latestRemainingTasksByUser.get(String(userKey || '').trim()) || [];
+  let dialog = root.querySelector('[data-reports-remaining-dialog]');
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.className = 'reports-overdue-dialog reports-remaining-dialog';
+    dialog.dataset.reportsRemainingDialog = '';
+    root.append(dialog);
+  }
+  dialog.innerHTML = `
+    <div class="reports-overdue-dialog-head">
+      <div>
+        <h3>Осталось выполнить</h3>
+        <p>Выберите задачу, чтобы открыть связанное дело в общем перечне.</p>
+      </div>
+      <button class="icon-button" type="button" data-reports-remaining-close>×</button>
+    </div>
+    <div class="reports-overdue-list">
+      ${tasks.length ? tasks.map(task => renderRemainingTaskRow(task)).join('') : '<div class="reports-empty">Оставшиеся задачи по сотруднику не найдены.</div>'}
+    </div>
+    <div class="reports-overdue-actions">
+      <button class="btn primary" type="button" data-reports-remaining-close>Закрыть</button>
+    </div>
+  `;
+  dialog.querySelectorAll('[data-reports-remaining-close]').forEach(button => {
+    button.addEventListener('click', () => dialog.close(), { once: true });
+  });
+  dialog.addEventListener('click', event => {
+    const task = event.target.closest('[data-reports-remaining-task]');
+    if (task) {
+      dialog.close();
+      openGeneralCaseFromReport(task.dataset.reportsRemainingTask, userKey, 'remaining');
     }
   }, { once: true });
   if (!dialog.open) dialog.showModal();
 }
 
 function renderOverdueTaskRow(task = {}) {
-  const generalCaseId = task.general_case_id || task.generalCaseId || task.case_id || '';
-  const tag = generalCaseId ? 'button' : 'div';
-  const attrs = generalCaseId ? `type="button" data-reports-overdue-task="${escapeAttr(generalCaseId)}"` : '';
+  const generalCaseId = task.general_case_id || task.generalCaseId || task.linked_general_case_id || task.case_id || '';
+  const attrs = `type="button" data-reports-overdue-task="${escapeAttr(generalCaseId)}"`;
   const title = task.description || task.desc || task.assignment || task.title || 'Задача';
   const date = task.date_str || task.date || task.deadline || task.due_date || '';
-  return `<${tag} class="reports-overdue-row" ${attrs}>
+  const time = task.time || task.start_time || '';
+  const status = task.status || (Number(task.done || task.completed || 0) ? 'Выполнено' : 'В работе');
+  const priority = task.priority || task.importance || '';
+  const linkedCase = task.case_title || task.case_name || task.general_case_title || '';
+  const caseNumber = task.case_no || task.linked_case_no || task.court_no || task.linked_court_no || task.case_number || task.pk_number || '';
+  const meta = [
+    date ? `Срок: ${formatDate(date)}` : 'Срок не указан',
+    time ? `Время: ${time}` : '',
+    status ? `Статус: ${status}` : '',
+    priority ? `Приоритет: ${priority}` : '',
+  ].filter(Boolean).join(' · ');
+  const caseMeta = [linkedCase, caseNumber].filter(Boolean).join(' · ');
+  return `<button class="reports-overdue-row ${generalCaseId ? '' : 'is-unlinked'}" ${attrs}>
     <strong>${escapeHtml(title)}</strong>
-    <span>${escapeHtml(date ? formatDate(date) : 'Срок не указан')}</span>
-    <small>${escapeHtml(task.case_no || task.court_no || task.case_number || task.subject || '')}</small>
-    <em>${escapeHtml(task.status || (Number(task.done || task.completed || 0) ? 'Выполнено' : 'В работе'))}</em>
-  </${tag}>`;
+    <span>${escapeHtml(meta)}</span>
+    <small>${escapeHtml(caseMeta || task.subject || '')}</small>
+    <em>${generalCaseId ? 'Открыть дело' : 'Нет связи с делом'}</em>
+  </button>`;
 }
 
-function openGeneralCaseFromReport(id) {
+function renderRemainingTaskRow(task = {}) {
+  const generalCaseId = task.general_case_id || task.generalCaseId || task.linked_general_case_id || task.case_id || '';
+  const title = task.description || task.desc || task.assignment || task.title || 'Задача';
+  const date = task.date_str || task.date || task.deadline || task.due_date || '';
+  const time = task.time || task.start_time || '';
+  const status = task.status || (Number(task.done || task.completed || 0) ? 'Выполнено' : 'В работе');
+  const linkedCase = task.case_title || task.case_name || task.general_case_title || '';
+  const caseNumber = task.case_no || task.linked_case_no || task.court_no || task.linked_court_no || task.case_number || task.pk_number || '';
+  const meta = [
+    date ? `Срок: ${formatDate(date)}` : 'Срок не указан',
+    time ? `Время: ${time}` : '',
+    status ? `Статус: ${status}` : '',
+  ].filter(Boolean).join(' · ');
+  const caseMeta = [linkedCase, caseNumber].filter(Boolean).join(' · ');
+  return `<button class="reports-overdue-row ${generalCaseId ? '' : 'is-unlinked'}" type="button" data-reports-remaining-task="${escapeAttr(generalCaseId)}">
+    <strong>${escapeHtml(title)}</strong>
+    <span>${escapeHtml(meta)}</span>
+    <small>${escapeHtml(caseMeta || task.subject || '')}</small>
+    <em>${generalCaseId ? 'Открыть дело' : 'Нет связи с делом'}</em>
+  </button>`;
+}
+
+function openGeneralCaseFromReport(id, userKey = '', listKind = '') {
   const safeId = Number(id);
-  if (!safeId) return;
+  if (!safeId) {
+    setStatus('У задачи нет связи с делом из общего перечня.', true);
+    return;
+  }
+  saveReportsReturnContext(userKey, listKind);
   window.openView?.('cases');
   window.dispatchEvent(new CustomEvent('general-cases:open-case', {
     detail: { id: safeId, sourceView: 'reports' }
   }));
+}
+
+function saveReportsReturnContext(userKey = '', listKind = '') {
+  try {
+    window.sessionStorage?.setItem('legal-dashboard-reports-return-context', JSON.stringify({
+      mode: state.mode,
+      date: state.date,
+      year: state.year,
+      quarter: state.quarter,
+      selectedUserIds: state.selectedUserIds,
+      allUsers: state.allUsers,
+      overdueUserKey: String(userKey || state.openOverdueUserKey || '').trim(),
+      taskListKind: listKind || state.openTaskListKind || 'overdue',
+      scrollY: window.scrollY || 0,
+    }));
+  } catch {}
+}
+
+function restorePendingOverdueContext(root) {
+  let context = null;
+  try {
+    const raw = window.sessionStorage?.getItem('legal-dashboard-reports-return-context');
+    if (!raw) return;
+    context = JSON.parse(raw);
+    window.sessionStorage?.removeItem('legal-dashboard-reports-return-context');
+  } catch {
+    return;
+  }
+  if (!context || context.mode !== 'day') return;
+  const userKey = String(context.overdueUserKey || '').trim();
+  const listKind = context.taskListKind === 'remaining' ? 'remaining' : 'overdue';
+  if (userKey) {
+    setTimeout(() => {
+      if (listKind === 'remaining' && state.latestRemainingTasksByUser.has(userKey)) {
+        openRemainingTasksDialog(userKey);
+        return;
+      }
+      if (state.latestOverdueTasksByUser.has(userKey)) openOverdueTasksDialog(userKey);
+    }, 0);
+  }
+  if (Number.isFinite(Number(context.scrollY))) {
+    setTimeout(() => window.scrollTo({ top: Number(context.scrollY), behavior: 'auto' }), 0);
+  }
 }
 
 function renderQuarterlyReport(root, data = {}) {
@@ -739,7 +1016,7 @@ function renderQuarterlyReport(root, data = {}) {
     state.selectedCategory = categories[0].category;
   }
 
-  renderQuarterInflow(root, metrics, categories);
+  renderQuarterInflow(root, metrics, categories, quarter, data);
   renderExecutorReport(root, getRows(quarter, data, ['executor_report', 'by_executor', 'executor_categories']));
   renderQuarterTotals(root, quarter, data, metrics);
   renderStructureChart(root);
@@ -747,22 +1024,60 @@ function renderQuarterlyReport(root, data = {}) {
   renderStructureTable(root);
 }
 
-function renderQuarterInflow(root, metrics, categories) {
+function renderQuarterInflow(root, metrics, categories, quarter = {}, data = {}) {
   const node = root.querySelector('[data-reports-quarter-inflow]');
   if (!node) return;
   const quarterCount = pickMetric(metrics, ['cases_received_quarter', 'cases_this_quarter', 'received_quarter']);
   const ytdCount = pickMetric(metrics, ['cases_received_ytd', 'cases_ytd', 'received_ytd']);
+  const monthRows = getQuarterMonthRows(quarter, data, metrics);
+  const total = monthRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+  const previousTotal = monthRows.reduce((sum, row) => sum + Number(row.previous_count || 0), 0);
+  const maxValue = Math.max(...monthRows.flatMap(row => [Number(row.count || 0), Number(row.previous_count || 0)]), 1);
+  const peak = monthRows.reduce((best, row) => Number(row.count || 0) > Number(best.count || 0) ? row : best, monthRows[0] || {});
+  const avg = monthRows.length ? total / monthRows.length : 0;
+  const totalDynamics = previousTotal ? Math.round(((total - previousTotal) / previousTotal) * 100) : null;
+
   node.innerHTML = `
     <div class="reports-inflow-main">
       <div>
         <span>За выбранный квартал</span>
-        <strong>${formatMaybeNumber(quarterCount)}</strong>
+        <strong>${formatMaybeNumber(total || quarterCount)}</strong>
       </div>
       <div>
         <span>С начала года</span>
         <strong>${formatMaybeNumber(ytdCount)}</strong>
       </div>
+      <div>
+        <span>Динамика</span>
+        <strong>${formatDynamics(totalDynamics)}</strong>
+      </div>
     </div>
+    ${monthRows.length ? `
+      <div class="reports-quarter-bars">
+        ${monthRows.map(row => {
+          const value = Number(row.count || 0);
+          const previous = Number(row.previous_count || 0);
+          const width = Math.max(value ? 8 : 0, Math.round((value / maxValue) * 100));
+          const previousLeft = Math.max(0, Math.min(100, Math.round((previous / maxValue) * 100)));
+          return `
+            <div class="reports-quarter-bar-row">
+              <span class="reports-quarter-month">${escapeHtml(row.label || getQuarterMonthLabel(row.month))}</span>
+              <div class="reports-quarter-track">
+                <span class="reports-quarter-previous" style="left:${previousLeft}%"></span>
+                <span class="reports-quarter-current" style="width:${width}%">
+                  <b>${formatMaybeNumber(value)}</b>
+                </span>
+              </div>
+              <strong class="${Number(row.dynamics_percent) < 0 ? 'is-negative' : ''}">${formatDynamics(row.dynamics_percent)}</strong>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="reports-quarter-bars-foot">
+        <span>Пиковый месяц: <b>${escapeHtml(peak?.label || getQuarterMonthLabel(peak?.month))}</b></span>
+        <span>Среднее: <b>${avg.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}</b></span>
+      </div>
+    ` : emptyState('Нет помесячных данных за выбранный квартал.')}
     <div class="reports-category-chips">
       ${categories.length ? categories.map(row => `
         <button type="button" data-reports-category="${escapeAttr(row.category)}" class="${row.category === state.selectedCategory ? 'active' : ''}">
@@ -774,6 +1089,46 @@ function renderQuarterInflow(root, metrics, categories) {
   `;
 }
 
+function getQuarterMonthRows(quarter = {}, data = {}, metrics = {}) {
+  const rows = getRows(quarter, data, ['quarter_months', 'monthly_inflow', 'month_breakdown']);
+  if (rows.length) {
+    return rows.map(row => ({
+      month: Number(row.month || row.month_number || 0),
+      label: row.label || row.month_name || getQuarterMonthLabel(row.month || row.month_number),
+      count: Number(row.count ?? row.current_count ?? row.value ?? 0),
+      previous_count: Number(row.previous_count ?? row.previous_year_count ?? row.previous ?? 0),
+      dynamics_percent: row.dynamics_percent ?? row.dynamic_percent ?? row.delta_percent ?? null,
+    }));
+  }
+
+  const total = pickMetric(metrics, ['cases_received_quarter', 'cases_this_quarter', 'received_quarter']);
+  if (total === null || total === undefined || Number(total) === 0) return [];
+  return getQuarterMonthIndexes(state.quarter).map(month => ({
+    month,
+    label: getQuarterMonthLabel(month),
+    count: 0,
+    previous_count: 0,
+    dynamics_percent: null,
+  }));
+}
+
+function getQuarterMonthIndexes(quarter) {
+  const value = Math.min(4, Math.max(1, Number(quarter) || 1));
+  const start = (value - 1) * 3 + 1;
+  return [start, start + 1, start + 2];
+}
+
+function getQuarterMonthLabel(month) {
+  const value = Number(month || 0);
+  if (value < 1 || value > 12) return '';
+  return new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(new Date(state.year, value - 1, 1));
+}
+
+function formatDynamics(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${number > 0 ? '+' : ''}${number.toLocaleString('ru-RU')}%`;
+}
 function renderExecutorReport(root, rows) {
   const node = root.querySelector('[data-reports-executor-report]');
   if (!node) return;
@@ -901,8 +1256,8 @@ function getEmployeeCards(scoped, data, hearings, tasks) {
   const workload = getRows(scoped, data, ['workload']);
   return workload.map(row => {
     const name = row.user_name || row.full_name || row.name || '';
-    const employeeHearings = hearings.filter(hearing => matchesPerson(hearing, name));
-    const employeeTasks = tasks.filter(task => matchesPerson(task, name));
+    const employeeHearings = hearings.filter(hearing => matchesPerson(hearing, name, row));
+    const employeeTasks = tasks.filter(task => matchesPerson(task, name, row));
     return {
       ...row,
       hearings: employeeHearings,
@@ -1211,25 +1566,63 @@ function renderCompactList(rows, emptyText) {
     : `<p>${escapeHtml(emptyText)}</p>`;
 }
 
-function matchesPerson(row, name) {
+function matchesPerson(row, name, person = {}) {
+  const personIds = getPersonIds(person, true);
+  if (personIds.length) {
+    const rowIds = getPersonIds(row);
+    if (rowIds.some(id => personIds.includes(id))) return true;
+  }
+
   const needle = normalizeName(name);
   if (!needle) return false;
+  return getPersonNames(row).some(value => {
+    const normalized = normalizeName(value);
+    return normalized === needle
+      || (needle.length > 5 && normalized.includes(needle))
+      || (normalized.length > 5 && needle.includes(normalized));
+  });
+}
+
+function getPersonIds(row = {}, includePlainId = false) {
+  return [
+    includePlainId ? row.id : '',
+    row.user_id,
+    row.employee_id,
+    row.executor_id,
+    row.representative_id,
+    row.owner_id,
+    row.assignee_id,
+    row.delegated_to_id,
+    row.case_executor_id,
+  ]
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value) && value > 0);
+}
+
+function getPersonNames(row = {}) {
   return [
     row.user_name,
     row.user,
     row.employee,
     row.full_name,
+    row.name,
     row.representative,
     row.executor,
     row.case_executor,
+    row.owner,
+    row.assignee,
     row.delegated_to,
-  ].some(value => normalizeName(value) === needle);
+  ];
+}
+
+function getPrimaryPersonName(row = {}) {
+  return getPersonNames(row).find(value => String(value || '').trim()) || '';
 }
 
 function buildTimelineEmployees(hearings) {
   const byName = new Map();
   hearings.forEach(row => {
-    const name = row.representative || row.employee || row.case_executor || 'Сотрудник не указан';
+    const name = getPrimaryPersonName(row) || 'Сотрудник не указан';
     if (!byName.has(name)) byName.set(name, { user_name: name, hearings: [] });
     byName.get(name).hearings.push(row);
   });

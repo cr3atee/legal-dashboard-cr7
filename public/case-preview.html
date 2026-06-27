@@ -339,6 +339,21 @@
       try { return JSON.parse(value); } catch { return null; }
     }
 
+    function readSessionToken(storage) {
+      try {
+        const raw = storage?.getItem('legal-dashboard-auth-session-v1');
+        if (!raw) return '';
+        const session = JSON.parse(raw);
+        return String(session?.token || '').trim();
+      } catch {
+        return '';
+      }
+    }
+
+    function getSessionToken() {
+      return readSessionToken(window.sessionStorage) || readSessionToken(window.opener?.sessionStorage);
+    }
+
     function getStatus(row) {
       if (Number(row.control_flag) === 1) return 'Контрольное';
       if (Number(row.attendance_flag) === 1) return 'Явочное';
@@ -503,7 +518,17 @@
       }
 
       try {
-        const response = await fetch(`/api/general-cases/${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } });
+        const token = getSessionToken();
+        const response = await fetch(`/api/general-cases/${encodeURIComponent(id)}`, {
+          headers: {
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          }
+        });
+        if (response.status === 401) {
+          renderError('Не удалось открыть карточку дела', 'Сеанс входа истёк. Откройте предпросмотр из основного окна приложения после входа.');
+          return;
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const row = await response.json();
         if (!row || !row.id) {

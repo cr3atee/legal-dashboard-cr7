@@ -967,10 +967,27 @@
 
 .reports-filters {
   display: grid;
-  grid-template-columns: minmax(230px, 1.1fr) auto repeat(2, minmax(116px, 150px)) minmax(190px, .9fr) auto auto;
+  grid-template-columns: auto minmax(380px, 1fr) max-content max-content;
   gap: 12px;
   align-items: end;
   padding: 16px;
+}
+
+.reports-title-block {
+  grid-column: 1 / -1;
+}
+
+.reports-mode-toggle {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.reports-period-field {
+  min-width: 150px;
+}
+
+[data-reports-root][data-reports-mode="quarter"] .reports-filters {
+  grid-template-columns: repeat(2, minmax(116px, 150px)) minmax(380px, 1fr) max-content max-content;
 }
 
 .reports-filters label,
@@ -1007,7 +1024,8 @@
   position: relative;
   display: grid;
   gap: 7px;
-  min-width: 0;
+  min-width: 360px;
+  width: 100%;
 }
 
 .reports-user-picker-toggle {
@@ -1025,6 +1043,20 @@
   font: inherit;
   font-weight: 850;
   cursor: pointer;
+}
+
+.reports-user-picker-toggle [data-reports-users-label] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-show-btn {
+  min-width: 112px;
+  padding-left: 16px;
+  padding-right: 16px;
+  justify-self: start;
 }
 
 .reports-user-picker-toggle::after {
@@ -1050,7 +1082,8 @@
   z-index: 30;
   top: calc(100% + 8px);
   left: 0;
-  right: 0;
+  width: min(640px, calc(100vw - 48px));
+  min-width: 360px;
   max-height: 260px;
   border: 1px solid var(--reports-line-strong);
   border-radius: 16px;
@@ -1495,6 +1528,609 @@ button.reports-list-row {
   background: rgba(255, 236, 239, .82);
 }
 
+.reports-employee-grid.is-single {
+  justify-items: center;
+}
+
+.reports-employee-card {
+  width: 100%;
+  max-width: 1200px;
+  display: grid;
+  gap: 22px;
+  border: 1px solid #dce5f0;
+  border-radius: 28px;
+  padding: 28px 32px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(23, 50, 77, .10);
+}
+
+.reports-employee-card.status-green,
+.reports-employee-card.status-yellow,
+.reports-employee-card.status-red {
+  border-left: 1px solid #dce5f0;
+}
+
+.reports-employee-head {
+  min-height: 94px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.reports-employee-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.reports-employee-avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: #e8f5f1;
+  color: #178c6b;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.reports-employee-title-block {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.reports-employee-head h4 {
+  margin: 0;
+  color: #0f2745;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.reports-employee-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.reports-status-chip {
+  min-height: 34px;
+  border: 0;
+  border-radius: 17px;
+  padding: 7px 12px;
+  background: #e9f7f2;
+  color: #126b51;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reports-status-chip span {
+  width: 10px;
+  height: 10px;
+  background: #1a9c72;
+}
+
+.status-yellow .reports-status-chip {
+  background: #fff4e6;
+  color: #a66316;
+}
+
+.status-yellow .reports-status-chip span {
+  background: #c78517;
+}
+
+.status-red .reports-status-chip {
+  background: #fff2f3;
+  color: #a23a49;
+}
+
+.status-red .reports-status-chip span {
+  background: #be4256;
+}
+
+.reports-employee-updated {
+  color: #7a8ca5;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.reports-overdue-summary {
+  width: 260px;
+  min-height: 78px;
+  flex: 0 0 260px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #f5c6cb;
+  border-radius: 20px;
+  padding: 14px 18px;
+  background: #fff2f3;
+  color: #8d2333;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.reports-overdue-summary:hover,
+.reports-overdue-summary:focus-visible {
+  transform: translateY(-1px);
+  border-color: #eaa7af;
+  box-shadow: 0 8px 18px rgba(141, 35, 51, .10);
+  outline: none;
+}
+
+.reports-overdue-summary b {
+  display: block;
+  color: #a54c58;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reports-overdue-summary small {
+  display: block;
+  margin-top: 4px;
+  color: #b76a74;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reports-overdue-summary strong {
+  color: #8d2333;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.reports-employee-divider {
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: #e7edf5;
+}
+
+.reports-employee-middle {
+  display: grid;
+  grid-template-columns: 548px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.reports-employee-tasks-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.reports-employee-section {
+  min-width: 0;
+  border-top: 0;
+  border-radius: 22px;
+  padding: 20px;
+  background: #f8fafd;
+}
+
+.reports-plan-card,
+.reports-hearings-card {
+  min-height: 250px;
+  padding: 22px;
+}
+
+.reports-employee-tasks-row .reports-employee-section {
+  min-height: 250px;
+}
+
+.reports-task-metric-card {
+  min-height: 118px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #d9e3ef;
+  border-radius: 22px;
+  padding: 22px;
+  background: #f8fafd;
+  color: #0f2745;
+  text-align: left;
+  font: inherit;
+}
+
+button.reports-task-metric-card {
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+button.reports-task-metric-card:hover,
+button.reports-task-metric-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: #b8cae0;
+  box-shadow: 0 12px 24px rgba(31, 72, 123, .10);
+  outline: none;
+}
+
+.reports-task-metric-card b {
+  display: block;
+  color: #4c617c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.reports-task-metric-card small {
+  display: block;
+  margin-top: 5px;
+  color: #7a8ca5;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reports-task-metric-card strong {
+  min-width: 64px;
+  text-align: right;
+  color: #315c8c;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.reports-task-metric-card.is-done {
+  background: #f0faf6;
+  border-color: #cfe9de;
+}
+
+.reports-task-metric-card.is-done strong {
+  color: #16835f;
+}
+
+.reports-task-metric-card.is-remaining {
+  background: #f2f6fc;
+}
+
+.reports-employee-section h5 {
+  margin: 0;
+  color: #0f2745;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.reports-plan-card h5,
+.reports-hearings-card h5 {
+  font-size: 18px;
+}
+
+.reports-plan-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 26px;
+}
+
+.reports-plan-main strong {
+  color: #0f2745;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.reports-plan-main p {
+  margin: 8px 0 0;
+  color: #70839e;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.reports-plan-percent {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf1fa;
+  color: #315c8c;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.reports-plan-progress {
+  height: 12px;
+  margin-top: 24px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e3eaf3;
+}
+
+.reports-plan-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: #1a9c72;
+}
+
+.reports-plan-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.reports-plan-stats div {
+  min-height: 58px;
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.reports-plan-stats span {
+  display: block;
+  color: #7a8ca5;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reports-plan-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: #1a9c72;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.reports-plan-stats div:last-child strong {
+  color: #315c8c;
+}
+
+.reports-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.reports-section-title-row > span {
+  min-width: 34px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 5px 10px;
+  background: #eaf1fa;
+  color: #315c8c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reports-hearings-empty,
+.reports-task-empty {
+  min-height: 172px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+  border: 1px solid #d9e3ef;
+  border-radius: 18px;
+  background: #fff;
+  text-align: center;
+}
+
+.reports-hearings-empty i {
+  color: #8aa0ba;
+  font-size: 28px;
+  font-style: normal;
+}
+
+.reports-hearings-empty strong {
+  color: #4c617c;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.reports-hearings-empty p,
+.reports-task-empty {
+  color: #8a9bb0;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.reports-hearing-list,
+.reports-task-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.reports-hearing-chip,
+.reports-task-row {
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.reports-hearing-chip {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.reports-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reports-task-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #334e6e;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-task-date {
+  white-space: nowrap;
+  color: #7a8ca5;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reports-task-date.is-today,
+.reports-task-date.is-overdue,
+.reports-task-date.is-done {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 13px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reports-task-date.is-today {
+  background: #fff4e6;
+  color: #a66316;
+}
+
+.reports-task-date.is-overdue {
+  background: #fff2f3;
+  color: #a23a49;
+}
+
+.reports-task-date.is-done {
+  background: #e9f7f2;
+  color: #126b51;
+}
+
+.reports-employee-note {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 21px;
+  padding: 9px 16px;
+  background: #f2f6fb;
+  color: #607792;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:root[data-theme="dark"] .reports-employee-card {
+  border-color: rgba(148, 163, 184, .28);
+  background: var(--reports-panel);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .24);
+}
+
+:root[data-theme="dark"] .reports-employee-head h4,
+:root[data-theme="dark"] .reports-employee-section h5,
+:root[data-theme="dark"] .reports-plan-main strong {
+  color: var(--reports-ink);
+}
+
+:root[data-theme="dark"] .reports-employee-section,
+:root[data-theme="dark"] .reports-employee-note,
+:root[data-theme="dark"] .reports-task-metric-card {
+  background: rgba(15, 23, 42, .46);
+}
+
+:root[data-theme="dark"] .reports-plan-stats div,
+:root[data-theme="dark"] .reports-hearings-empty,
+:root[data-theme="dark"] .reports-task-empty,
+:root[data-theme="dark"] .reports-hearing-chip,
+:root[data-theme="dark"] .reports-task-row {
+  border-color: rgba(148, 163, 184, .22);
+  background: rgba(255, 255, 255, .06);
+}
+
+:root[data-theme="dark"] .reports-task-row strong,
+:root[data-theme="dark"] .reports-hearing-chip span,
+:root[data-theme="dark"] .reports-task-metric-card b {
+  color: var(--reports-ink);
+}
+
+:root[data-theme="dark"] .reports-task-metric-card {
+  border-color: rgba(148, 163, 184, .24);
+}
+
+:root[data-theme="dark"] .reports-task-metric-card small {
+  color: var(--reports-ink-muted);
+}
+
+:root[data-theme="dark"] .reports-quarter-track {
+  background: rgba(15, 23, 42, .46);
+}
+
+:root[data-theme="dark"] .reports-quarter-bars-foot span {
+  background: rgba(255, 255, 255, .06);
+}
+
+:root[data-theme="dark"] .reports-overdue-summary {
+  background: rgba(127, 29, 29, .28);
+  border-color: rgba(248, 113, 113, .34);
+}
+
+:root[data-theme="dark"] .reports-employee-divider {
+  background: rgba(148, 163, 184, .24);
+}
+
+@media (max-width: 1100px) {
+  .reports-employee-middle,
+  .reports-employee-tasks-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .reports-user-picker,
+  .reports-user-picker-menu {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .reports-employee-card {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .reports-employee-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reports-overdue-summary {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .reports-employee-head h4 {
+    font-size: 24px;
+  }
+
+  .reports-plan-main {
+    align-items: flex-start;
+  }
+
+  .reports-plan-main strong {
+    font-size: 26px;
+  }
+
+  .reports-plan-stats,
+  .reports-hearing-chip {
+    grid-template-columns: 1fr;
+  }
+}
+
 .reports-overdue-dialog {
   width: min(760px, 92vw);
   border: 0;
@@ -1657,7 +2293,7 @@ button.reports-list-row {
 
 .reports-inflow-main {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1680,6 +2316,94 @@ button.reports-list-row {
   margin-top: 7px;
   color: #2457d6;
   font-size: 34px;
+}
+
+.reports-quarter-bars {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.reports-quarter-bar-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 70px;
+  gap: 14px;
+  align-items: center;
+}
+
+.reports-quarter-month {
+  color: var(--reports-ink);
+  font-size: 14px;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+
+.reports-quarter-track {
+  position: relative;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid var(--reports-line);
+  border-radius: 17px;
+  background: #eef4fb;
+}
+
+.reports-quarter-current {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 100%;
+  border-radius: 17px;
+  padding: 0 12px;
+  background: linear-gradient(90deg, #2457d6, #5ca8f1);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(36, 87, 214, .18);
+}
+
+.reports-quarter-current b {
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.reports-quarter-previous {
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: #94a3b8;
+}
+
+.reports-quarter-bar-row > strong {
+  color: #16835f;
+  font-size: 14px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.reports-quarter-bar-row > strong.is-negative {
+  color: #be4256;
+}
+
+.reports-quarter-bars-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--reports-ink-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.reports-quarter-bars-foot span {
+  border: 1px solid var(--reports-line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #fff;
 }
 
 .reports-category-chips {

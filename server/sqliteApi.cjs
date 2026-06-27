@@ -1181,6 +1181,12 @@ function getQuarterFromDate(value = new Date()) {
   return Math.floor(date.getMonth() / 3) + 1;
 }
 
+function getQuarterMonthIndexes(quarter) {
+  const value = Math.min(4, Math.max(1, Number(quarter) || 1));
+  const start = (value - 1) * 3;
+  return [start, start + 1, start + 2];
+}
+
 function normalizeReportYear(value, fallbackDate = new Date()) {
   const year = Number(value);
   if (Number.isInteger(year) && year >= 2000 && year <= 2100) return year;
@@ -1369,8 +1375,8 @@ async function assertQuarterlyReportAccess(dbPath, session, reportId) {
   return row;
 }
 
-async function buildReportsSummary(dbPath, scope, year, quarter) {
-  const now = new Date();
+async function buildReportsSummary(dbPath, scope, year, quarter, reportDate = new Date()) {
+  const now = toReportDate(reportDate) || new Date();
   const thisYear = now.getFullYear();
   const thisMonth = now.getMonth();
   const ownerFilter = row => isOwnedByReportScope(row, scope, ['executor', 'representative', 'user_name', 'user', 'delegated_to', 'case_executor']);
@@ -1387,6 +1393,17 @@ async function buildReportsSummary(dbPath, scope, year, quarter) {
     row.cassation_act_date
   ].some(value => isReportDateInMonth(value, thisYear, thisMonth)));
   const movementIds = new Set([...updatedThisMonth, ...judicialActCases].map(row => Number(row.id)).filter(Boolean));
+  const quarterMonths = getQuarterMonthIndexes(quarter).map(monthIndex => {
+    const current = generalRows.filter(row => isReportDateInMonth(row.registration_date || row.created_at, year, monthIndex)).length;
+    const previous = generalRows.filter(row => isReportDateInMonth(row.registration_date || row.created_at, year - 1, monthIndex)).length;
+    return {
+      month: monthIndex + 1,
+      label: new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(new Date(year, monthIndex, 1)),
+      count: current,
+      previous_count: previous,
+      dynamics_percent: previous ? Math.round(((current - previous) / previous) * 100) : null
+    };
+  });
 
   const scheduleRows = (await all(dbPath, `
     SELECT s.*, g.executor AS case_executor, g.case_no, g.court_no, g.claim_subject
@@ -1402,9 +1419,14 @@ async function buildReportsSummary(dbPath, scope, year, quarter) {
     .filter(row => ownerFilter(row));
 
   const taskRows = (await all(dbPath, `
-    SELECT *
-    FROM calendar_tasks
-    ORDER BY COALESCE(date_str, "date", '') ASC, COALESCE(time_val, "time", '') ASC, id ASC
+    SELECT
+      t.*,
+      g.case_no AS linked_case_no,
+      g.court_no AS linked_court_no,
+      g.claim_subject AS linked_subject
+    FROM calendar_tasks t
+    LEFT JOIN general_cases g ON g.id=t.general_case_id
+    ORDER BY COALESCE(t.date_str, t."date", '') ASC, COALESCE(t.time_val, t."time", '') ASC, t.id ASC
     LIMIT 10000
   `, []).catch(() => [])).filter(row => ownerFilter(row));
   const openTasks = taskRows.filter(row => Number(row.done || 0) !== 1);
@@ -1479,6 +1501,7 @@ async function buildReportsSummary(dbPath, scope, year, quarter) {
       quarterly_reports: reportRows.length,
       employees_without_report: employeesWithoutReport.length
     },
+    quarter_months: quarterMonths,
     active_cases: activeCases.slice(0, 12).map(row => ({
       id: row.id,
       case_no: row.case_no || row.court_no || '',
@@ -1490,10 +1513,12 @@ async function buildReportsSummary(dbPath, scope, year, quarter) {
     })),
     hearings_today: todayHearings.slice(0, 20).map(row => ({
       id: row.id,
+      general_case_id: row.general_case_id || null,
       session_date: formatReportDate(row.session_date || row.hearing_date),
       time: row.time || '',
       court: row.court || '',
       representative: row.representative || row.case_executor || '',
+      case_executor: row.case_executor || '',
       case_no: row.case_no || row.court_no || '',
       subject: row.result || row.claim_subject || ''
     })),
@@ -1505,21 +1530,27 @@ async function buildReportsSummary(dbPath, scope, year, quarter) {
       result: row.result || '',
       updated_at: row.updated_at || ''
     })),
-    calendar_tasks: taskRows.slice(0, 30).map(row => ({
+    calendar_tasks: taskRows.slice(0, 500).map(row => ({
       id: row.id,
       date: formatReportDate(row.date_str || row.date),
       time: row.time_val || row.time || '',
       user_name: row.user_name || row.user || '',
       type: row.task_type || row.type || '',
       description: row.description || row.desc || row.assignment || '',
+      general_case_id: row.general_case_id || null,
+      case_no: row.linked_case_no || row.linked_court_no || '',
+      subject: row.subject || row.linked_subject || '',
       done: Number(row.done || 0) ? 1 : 0,
       overdue: isReportDateOverdue(row.date_str || row.date, now) && Number(row.done || 0) !== 1 ? 1 : 0
     })),
-    today_tasks: todayTasks.slice(0, 12).map(row => ({
+    today_tasks: todayTasks.slice(0, 100).map(row => ({
       id: row.id,
       time: row.time_val || row.time || '',
       user_name: row.user_name || row.user || '',
       description: row.description || row.desc || row.assignment || '',
+      general_case_id: row.general_case_id || null,
+      case_no: row.linked_case_no || row.linked_court_no || '',
+      subject: row.subject || row.linked_subject || '',
       done: Number(row.done || 0) ? 1 : 0
     })),
     workload: [...workloadByName.values()].sort((a, b) => {
@@ -2679,7 +2710,7 @@ if (meetingsMatchSourcePort) {
         scope: parsedUrl.searchParams.get('scope') || '',
         all: parsedUrl.searchParams.get('all') || ''
       });
-      const summary = await buildReportsSummary(dbPath, scope, year, quarter);
+      const summary = await buildReportsSummary(dbPath, scope, year, quarter, reportDate);
       sendJson(res, 200, {
         ok: true,
         updated_at: new Date().toISOString(),
