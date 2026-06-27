@@ -11,8 +11,7 @@ import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipal
 import { initMeetingsPage } from './modules/meetings/meetingsController.js';
 import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js';
 import { initReportsPage } from './modules/reports/reportsController.js';
-import { initReportsCompatibilityController } from './modules/reports/reportsCompatibilityController.js';
-import { initReportsQuarterReferenceController } from './modules/reports/reportsQuarterReferenceController.js';
+import { initReportsDerivedDataController } from './modules/reports/reportsDerivedDataController.js';
 import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
@@ -40,8 +39,7 @@ export function initApp() {
     initMeetingsPage();
     initMeetingsWorkflowUi();
     initReportsPage();
-    initReportsCompatibilityController();
-    initReportsQuarterReferenceController();
+    initReportsDerivedDataController();
     initAdminUsersPage();
     initAdminDictionariesPage();
     initMapFullscreenButton();
