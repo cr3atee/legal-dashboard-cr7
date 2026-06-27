@@ -49,7 +49,12 @@ export function initGeneralCaseReportEnhancements() {
 
   const root = document.querySelector('#cases');
   if (root) {
-    state.observer = new MutationObserver(scheduleDecorate);
+    state.observer = new MutationObserver(mutations => {
+      scheduleDecorate();
+      if (mutations.some(mutation => mutation.type === 'attributes' && mutation.attributeName === 'open')) {
+        window.setTimeout(syncOpenFormEnhancements, 40);
+      }
+    });
     state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
   }
   scheduleDecorate();
@@ -96,7 +101,6 @@ function installFormEnhancements() {
   if (categorySelect) replaceCategoryOptions(categorySelect, 'Не выбрано');
   const categoryFilter = document.querySelector('[data-general-dispute-category-filter]');
   if (categoryFilter) replaceCategoryOptions(categoryFilter, 'Все категории', 'all');
-  syncOpenFormEnhancements();
 }
 
 function replaceCategoryOptions(select, emptyLabel, emptyValue = '') {
@@ -114,7 +118,9 @@ function handleOpenClick(event) {
   const create = event.target.closest?.('[data-general-new]');
   if (!open && !create) return;
   const id = Number(open?.dataset.generalOpen || 0);
-  window.setTimeout(() => syncFormWithRow(id ? state.rowsById.get(id) : null), 190);
+  const row = id ? state.rowsById.get(id) : null;
+  window.setTimeout(() => syncFormWithRow(row), 190);
+  window.setTimeout(() => syncFormWithRow(row), 380);
 }
 
 function syncOpenFormEnhancements() {
@@ -125,7 +131,7 @@ function syncOpenFormEnhancements() {
 }
 
 function syncFormWithRow(row) {
-  installFormEnhancementsShallow();
+  installFormEnhancements();
   const input = document.querySelector('[data-general-form] [name="prosecutor_claim_flag"]');
   if (input) input.checked = Number(row?.prosecutor_claim_flag || 0) === 1;
   let appeals = [];
@@ -138,17 +144,6 @@ function syncFormWithRow(row) {
     node.dataset.metricCounterId = appeal.counter_id || node.dataset.metricCounterId || randomId();
     node.dataset.metricCreatedAt = appeal.counter_created_at || node.dataset.metricCreatedAt || new Date().toISOString();
   });
-}
-
-function installFormEnhancementsShallow() {
-  const form = document.querySelector('[data-general-form]');
-  if (!form) return;
-  const flags = form.querySelector('.case-form-flags');
-  if (flags && !flags.querySelector('[name="prosecutor_claim_flag"]')) {
-    flags.insertAdjacentHTML('beforeend', '<label class="check-row case-flag-toggle prosecutor-flag-toggle"><input type="checkbox" name="prosecutor_claim_flag"><span>Иск прокурора</span></label>');
-  }
-  flags?.querySelectorAll('label.check-row').forEach(label => label.classList.add('case-flag-toggle'));
-  if (form.elements.category) replaceCategoryOptions(form.elements.category, 'Не выбрано');
 }
 
 function scheduleDecorate() {
@@ -165,6 +160,7 @@ function decorateCaseCards() {
     const badges = card.querySelector('.general-case-badges');
     const existing = badges?.querySelector('[data-prosecutor-case-badge]');
     if (Number(row?.prosecutor_claim_flag || 0) === 1) {
+      card.querySelector('.case-badge.neutral')?.remove();
       if (!existing) badges?.insertAdjacentHTML('beforeend', '<span class="case-badge prosecutor" data-prosecutor-case-badge>Иск прокурора</span>');
     } else existing?.remove();
   });
