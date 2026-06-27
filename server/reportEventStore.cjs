@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const REPORT_CATEGORIES = require('./reportCategories.cjs');
 
 const schemaReady = new Map();
-const BOOTSTRAP_KEY = 'report_event_ledger_bootstrap_v2';
+const BOOTSTRAP_KEY = 'report_event_ledger_bootstrap_v3';
 const MARKERS = [
   ['control_flag', 'Контрольное дело'],
   ['review_show_flag', 'Отзыв показать'],
@@ -152,6 +152,10 @@ function isHearingCalculatorItem(item = {}) {
   return text.includes('заседан') || text.includes('слушан');
 }
 
+function hasDatedAppeal(item = {}) {
+  return Boolean(parseDate(item.date || item.event_date || item.appeal_date || item.submitted_at));
+}
+
 async function upsertEvent(dbPath, event) {
   const period = periodOf(event.event_date);
   const now = new Date().toISOString();
@@ -214,7 +218,7 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
     if (!Array.isArray(appeals)) continue;
     for (let index = 0; index < appeals.length; index += 1) {
       const item = appeals[index] || {};
-      if (isHearingCalculatorItem(item) || !Object.values(item).some(value => String(value ?? '').trim())) continue;
+      if (isHearingCalculatorItem(item) || !hasDatedAppeal(item)) continue;
       await upsertEvent(dbPath, {
         event_type: 'appeal',
         source_key: appealKey(caseId, item, index),
@@ -225,7 +229,7 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
         metadata: {
           general_case_id: caseId,
           kind: item.appeal_kind || item.kind || item.title || 'Обжалование',
-          event_date: item.date || item.event_date || '',
+          event_date: item.date || item.event_date || item.appeal_date || '',
           counter_id: item.counter_id || `legacy-${index + 1}`
         }
       });
@@ -236,6 +240,7 @@ async function bootstrapCases(dbPath, rows, extraFlags) {
 async function bootstrap(dbPath) {
   const migrated = await get(dbPath, 'SELECT key FROM schema_migrations WHERE key=?', [BOOTSTRAP_KEY]).catch(() => null);
   if (migrated) return;
+  await run(dbPath, "DELETE FROM report_event_ledger WHERE event_type='appeal'").catch(() => {});
   const flagRows = await all(dbPath, 'SELECT general_case_id,prosecutor_claim_flag FROM general_case_extra_flags').catch(() => []);
   const extraFlags = new Map(flagRows.map(row => [Number(row.general_case_id), flag(row.prosecutor_claim_flag)]));
   await bootstrapCases(dbPath, await all(dbPath, 'SELECT * FROM general_cases').catch(() => []), extraFlags);
