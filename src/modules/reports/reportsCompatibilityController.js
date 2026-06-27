@@ -126,6 +126,7 @@ function renderTimeline(root, hearings, selectedNames) {
       `).join('')}
     `;
   } finally {
+    runtime.observer?.takeRecords();
     runtime.applying = false;
   }
 }
