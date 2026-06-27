@@ -1,3 +1,5 @@
+import { dbApi } from '../../api/dbApi.js';
+
 const DISPUTE_CATEGORIES = [
   'Выселение, признание утратившим право на жилое помещение',
   'Дела (материалы) об исполнении судебных решений',
@@ -27,6 +29,7 @@ const DISPUTE_CATEGORIES = [
 
 const state = {
   initialized: false,
+  apiPatched: false,
   rowsById: new Map(),
   observer: null,
   timer: null
@@ -35,7 +38,7 @@ const state = {
 export function initGeneralCaseReportEnhancements() {
   if (state.initialized) return;
   state.initialized = true;
-
+  patchCaseSaveMethods();
   installFormEnhancements();
   document.addEventListener('click', handleOpenClick, true);
   window.addEventListener('general-cases:updated', event => {
@@ -47,32 +50,61 @@ export function initGeneralCaseReportEnhancements() {
   const root = document.querySelector('#cases');
   if (root) {
     state.observer = new MutationObserver(scheduleDecorate);
-    state.observer.observe(root, { childList: true, subtree: true });
+    state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
   }
   scheduleDecorate();
+}
+
+function patchCaseSaveMethods() {
+  if (state.apiPatched) return;
+  state.apiPatched = true;
+  const originalCreate = dbApi.createGeneralCase.bind(dbApi);
+  const originalUpdate = dbApi.updateGeneralCase.bind(dbApi);
+  dbApi.createGeneralCase = data => originalCreate(attachAppealMetricIds(data));
+  dbApi.updateGeneralCase = (id, data) => originalUpdate(id, attachAppealMetricIds(data));
+}
+
+function attachAppealMetricIds(data = {}) {
+  let rows = [];
+  try {
+    const parsed = JSON.parse(data.appeals_json || '[]');
+    rows = Array.isArray(parsed) ? parsed : [];
+  } catch {}
+  const domRows = [...document.querySelectorAll('[data-general-appeal-row]')];
+  rows = rows.map((row, index) => {
+    const node = domRows[index];
+    const counterId = row.counter_id || node?.dataset.metricCounterId || randomId();
+    const createdAt = row.counter_created_at || node?.dataset.metricCreatedAt || new Date().toISOString();
+    if (node) {
+      node.dataset.metricCounterId = counterId;
+      node.dataset.metricCreatedAt = createdAt;
+    }
+    return { ...row, counter_id: counterId, counter_created_at: createdAt };
+  });
+  return { ...data, appeals_json: JSON.stringify(rows) };
 }
 
 function installFormEnhancements() {
   const form = document.querySelector('[data-general-form]');
   if (!form) return;
-
   const flags = form.querySelector('.case-form-flags');
   if (flags && !flags.querySelector('[name="prosecutor_claim_flag"]')) {
     flags.insertAdjacentHTML('beforeend', '<label class="check-row case-flag-toggle prosecutor-flag-toggle"><input type="checkbox" name="prosecutor_claim_flag"><span>Иск прокурора</span></label>');
   }
   flags?.querySelectorAll('label.check-row').forEach(label => label.classList.add('case-flag-toggle'));
-
   const categorySelect = form.elements.category;
   if (categorySelect) replaceCategoryOptions(categorySelect, 'Не выбрано');
   const categoryFilter = document.querySelector('[data-general-dispute-category-filter]');
   if (categoryFilter) replaceCategoryOptions(categoryFilter, 'Все категории', 'all');
+  syncOpenFormEnhancements();
 }
 
 function replaceCategoryOptions(select, emptyLabel, emptyValue = '') {
   const current = String(select.value || '').trim();
-  const values = current && !DISPUTE_CATEGORIES.includes(current)
-    ? [current, ...DISPUTE_CATEGORIES]
-    : DISPUTE_CATEGORIES;
+  const values = current && !DISPUTE_CATEGORIES.includes(current) ? [current, ...DISPUTE_CATEGORIES] : DISPUTE_CATEGORIES;
+  const signature = `${emptyValue}|${current}|${values.join('|')}`;
+  if (select.dataset.reportCategorySignature === signature) return;
+  select.dataset.reportCategorySignature = signature;
   select.innerHTML = `<option value="${escapeAttr(emptyValue)}">${escapeHtml(emptyLabel)}</option>${values.map(value => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join('')}`;
   select.value = current || emptyValue;
 }
@@ -82,12 +114,41 @@ function handleOpenClick(event) {
   const create = event.target.closest?.('[data-general-new]');
   if (!open && !create) return;
   const id = Number(open?.dataset.generalOpen || 0);
-  window.setTimeout(() => {
-    installFormEnhancements();
-    const input = document.querySelector('[data-general-form] [name="prosecutor_claim_flag"]');
-    if (!input) return;
-    input.checked = id ? Number(state.rowsById.get(id)?.prosecutor_claim_flag || 0) === 1 : false;
-  }, 180);
+  window.setTimeout(() => syncFormWithRow(id ? state.rowsById.get(id) : null), 190);
+}
+
+function syncOpenFormEnhancements() {
+  const dialog = document.querySelector('[data-general-dialog]');
+  if (!dialog?.open && !dialog?.hasAttribute('open')) return;
+  const id = Number(document.querySelector('[data-general-form] [name="id"]')?.value || 0);
+  syncFormWithRow(id ? state.rowsById.get(id) : null);
+}
+
+function syncFormWithRow(row) {
+  installFormEnhancementsShallow();
+  const input = document.querySelector('[data-general-form] [name="prosecutor_claim_flag"]');
+  if (input) input.checked = Number(row?.prosecutor_claim_flag || 0) === 1;
+  let appeals = [];
+  try {
+    const parsed = JSON.parse(row?.appeals_json || '[]');
+    appeals = Array.isArray(parsed) ? parsed : [];
+  } catch {}
+  [...document.querySelectorAll('[data-general-appeal-row]')].forEach((node, index) => {
+    const appeal = appeals[index] || {};
+    node.dataset.metricCounterId = appeal.counter_id || node.dataset.metricCounterId || randomId();
+    node.dataset.metricCreatedAt = appeal.counter_created_at || node.dataset.metricCreatedAt || new Date().toISOString();
+  });
+}
+
+function installFormEnhancementsShallow() {
+  const form = document.querySelector('[data-general-form]');
+  if (!form) return;
+  const flags = form.querySelector('.case-form-flags');
+  if (flags && !flags.querySelector('[name="prosecutor_claim_flag"]')) {
+    flags.insertAdjacentHTML('beforeend', '<label class="check-row case-flag-toggle prosecutor-flag-toggle"><input type="checkbox" name="prosecutor_claim_flag"><span>Иск прокурора</span></label>');
+  }
+  flags?.querySelectorAll('label.check-row').forEach(label => label.classList.add('case-flag-toggle'));
+  if (form.elements.category) replaceCategoryOptions(form.elements.category, 'Не выбрано');
 }
 
 function scheduleDecorate() {
@@ -95,33 +156,30 @@ function scheduleDecorate() {
   state.timer = window.setTimeout(() => {
     installFormEnhancements();
     decorateCaseCards();
-  }, 30);
+  }, 40);
 }
 
 function decorateCaseCards() {
   document.querySelectorAll('[data-general-card]').forEach(card => {
-    const id = Number(card.dataset.generalCard || 0);
-    const row = state.rowsById.get(id);
+    const row = state.rowsById.get(Number(card.dataset.generalCard || 0));
     const badges = card.querySelector('.general-case-badges');
     const existing = badges?.querySelector('[data-prosecutor-case-badge]');
     if (Number(row?.prosecutor_claim_flag || 0) === 1) {
       if (!existing) badges?.insertAdjacentHTML('beforeend', '<span class="case-badge prosecutor" data-prosecutor-case-badge>Иск прокурора</span>');
-    } else {
-      existing?.remove();
-    }
+    } else existing?.remove();
   });
-
   document.querySelectorAll('[data-general-row]').forEach(tableRow => {
-    const id = Number(tableRow.dataset.generalRow || 0);
-    const row = state.rowsById.get(id);
+    const row = state.rowsById.get(Number(tableRow.dataset.generalRow || 0));
     const badges = tableRow.querySelector('.general-cases-table-badges');
     const existing = badges?.querySelector('[data-prosecutor-case-marker]');
     if (Number(row?.prosecutor_claim_flag || 0) === 1) {
       if (!existing) badges?.insertAdjacentHTML('beforeend', '<span class="case-table-marker prosecutor" data-prosecutor-case-marker title="Иск прокурора" aria-label="Иск прокурора"></span>');
-    } else {
-      existing?.remove();
-    }
+    } else existing?.remove();
   });
+}
+
+function randomId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function escapeAttr(value) {
