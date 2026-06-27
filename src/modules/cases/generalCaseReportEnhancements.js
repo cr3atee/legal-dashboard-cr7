@@ -30,6 +30,7 @@ const DISPUTE_CATEGORIES = [
 const state = {
   initialized: false,
   apiPatched: false,
+  loadingRows: null,
   rowsById: new Map(),
   observer: null,
   timer: null
@@ -40,11 +41,12 @@ export function initGeneralCaseReportEnhancements() {
   state.initialized = true;
   patchCaseSaveMethods();
   installFormEnhancements();
+  void refreshCaseRows();
+
   document.addEventListener('click', handleOpenClick, true);
-  window.addEventListener('general-cases:updated', event => {
-    const rows = Array.isArray(event.detail) ? event.detail : [];
-    rows.forEach(row => state.rowsById.set(Number(row.id), row));
-    scheduleDecorate();
+  window.addEventListener('general-cases:reload', () => void refreshCaseRows());
+  window.addEventListener('app:view-changed', event => {
+    if (event.detail?.viewId === 'cases') void refreshCaseRows();
   });
 
   const root = document.querySelector('#cases');
@@ -52,7 +54,8 @@ export function initGeneralCaseReportEnhancements() {
     state.observer = new MutationObserver(mutations => {
       scheduleDecorate();
       if (mutations.some(mutation => mutation.type === 'attributes' && mutation.attributeName === 'open')) {
-        window.setTimeout(syncOpenFormEnhancements, 40);
+        const id = Number(document.querySelector('[data-general-form] [name="id"]')?.value || 0);
+        window.setTimeout(() => void syncOpenCase(id), 50);
       }
     });
     state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
@@ -65,8 +68,37 @@ function patchCaseSaveMethods() {
   state.apiPatched = true;
   const originalCreate = dbApi.createGeneralCase.bind(dbApi);
   const originalUpdate = dbApi.updateGeneralCase.bind(dbApi);
-  dbApi.createGeneralCase = data => originalCreate(attachAppealMetricIds(data));
-  dbApi.updateGeneralCase = (id, data) => originalUpdate(id, attachAppealMetricIds(data));
+  dbApi.createGeneralCase = async data => {
+    const saved = await originalCreate(attachAppealMetricIds(data));
+    if (saved?.id) state.rowsById.set(Number(saved.id), saved);
+    scheduleDecorate();
+    return saved;
+  };
+  dbApi.updateGeneralCase = async (id, data) => {
+    const saved = await originalUpdate(id, attachAppealMetricIds(data));
+    if (saved?.id) state.rowsById.set(Number(saved.id), saved);
+    scheduleDecorate();
+    return saved;
+  };
+}
+
+async function refreshCaseRows() {
+  if (state.loadingRows) return state.loadingRows;
+  state.loadingRows = dbApi.getGeneralCases()
+    .then(rows => {
+      state.rowsById.clear();
+      (Array.isArray(rows) ? rows : []).forEach(row => state.rowsById.set(Number(row.id), row));
+      scheduleDecorate();
+      return rows;
+    })
+    .catch(error => {
+      console.warn('Не удалось загрузить дополнительные пометки общего перечня:', error);
+      return [];
+    })
+    .finally(() => {
+      state.loadingRows = null;
+    });
+  return state.loadingRows;
 }
 
 function attachAppealMetricIds(data = {}) {
@@ -118,15 +150,12 @@ function handleOpenClick(event) {
   const create = event.target.closest?.('[data-general-new]');
   if (!open && !create) return;
   const id = Number(open?.dataset.generalOpen || 0);
-  const row = id ? state.rowsById.get(id) : null;
-  window.setTimeout(() => syncFormWithRow(row), 190);
-  window.setTimeout(() => syncFormWithRow(row), 380);
+  window.setTimeout(() => void syncOpenCase(id), 200);
+  window.setTimeout(() => void syncOpenCase(id), 400);
 }
 
-function syncOpenFormEnhancements() {
-  const dialog = document.querySelector('[data-general-dialog]');
-  if (!dialog?.open && !dialog?.hasAttribute('open')) return;
-  const id = Number(document.querySelector('[data-general-form] [name="id"]')?.value || 0);
+async function syncOpenCase(id) {
+  if (id && !state.rowsById.has(id)) await refreshCaseRows();
   syncFormWithRow(id ? state.rowsById.get(id) : null);
 }
 
