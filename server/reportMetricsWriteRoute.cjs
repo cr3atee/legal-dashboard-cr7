@@ -23,6 +23,11 @@ function read(req) {
   });
 }
 
+function isHearingAppeal(body = {}) {
+  const text = String(body.metadata?.kind || body.kind || '').toLowerCase();
+  return text.includes('заседан') || text.includes('слушан');
+}
+
 async function handleReportMetricsWrite(req, res, url, dbPath) {
   const route = url.pathname;
   if (!['/api/case-extra-flags', '/api/report-metric-events'].includes(route)) return false;
@@ -50,6 +55,10 @@ async function handleReportMetricsWrite(req, res, url, dbPath) {
     const sourceKey = String(body.source_key || '').trim();
     if (!['case', 'hearing', 'appeal'].includes(eventType) || !sourceKey) {
       send(res, 400, { error: 'invalid_event' });
+      return true;
+    }
+    if (eventType === 'appeal' && isHearingAppeal(body)) {
+      send(res, 200, { ok: true, skipped: 'hearing_calculator_item' });
       return true;
     }
     await store.registerEvent(dbPath, {
