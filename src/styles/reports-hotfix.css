@@ -1,0 +1,149 @@
+/* Reports hotfix: responsive cards, timeline and quarterly analytics. */
+.reports-redesign-view .reports-card,
+.reports-redesign-view .reports-card-head > div,
+.reports-redesign-view .reports-employee-card,
+.reports-redesign-view .reports-timeline,
+.reports-redesign-view .reports-chart-layout,
+.reports-redesign-view .reports-table-wrap {
+  min-width: 0;
+}
+
+.reports-redesign-view .reports-empty {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.45;
+}
+
+.reports-redesign-view .reports-empty-wide { grid-column: 1 / -1; }
+
+.reports-redesign-view .reports-employee-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+}
+
+.reports-redesign-view .reports-user-picker-toggle > span,
+.reports-redesign-view .reports-bar-label,
+.reports-redesign-view .reports-subject-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reports-redesign-view[data-reports-mode="quarter"] .reports-quarter-overview {
+  grid-template-columns: minmax(340px, .82fr) minmax(0, 1.18fr);
+}
+
+.reports-redesign-view .reports-inflow-main > div {
+  min-height: 104px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  border: 1px solid var(--reports-line);
+  border-radius: 16px;
+  padding: 15px;
+  background: linear-gradient(150deg, #fff, var(--reports-panel-soft));
+}
+
+.reports-redesign-view .reports-inflow-main strong,
+.reports-redesign-view .reports-number-cell {
+  color: #2457d6;
+  font-weight: 950;
+}
+
+.reports-redesign-view .reports-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reports-redesign-view .reports-category-chips button {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(36, 87, 214, .18);
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: #fff;
+  color: var(--reports-ink);
+  font: inherit;
+}
+
+.reports-redesign-view .reports-chart-layout {
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr);
+  gap: 16px;
+}
+
+.reports-redesign-view .reports-bar-row {
+  width: 100%;
+  grid-template-columns: minmax(120px, .8fr) minmax(120px, 1.4fr) auto;
+  gap: 12px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px;
+  background: transparent;
+  color: var(--reports-ink);
+  text-align: left;
+  font: inherit;
+}
+
+.reports-redesign-view .reports-bar-row:hover,
+.reports-redesign-view .reports-bar-row.active { background: rgba(36, 87, 214, .08); }
+
+.reports-redesign-view .reports-bar-track {
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(36, 87, 214, .10);
+}
+
+.reports-redesign-view .reports-bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2457d6, #72a3ff);
+}
+
+.reports-redesign-view .reports-subjects {
+  border: 1px solid var(--reports-line);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, .58);
+}
+
+.reports-redesign-view .reports-subject-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--reports-line);
+}
+
+.reports-redesign-view .reports-timeline-scale-spread {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.reports-redesign-view .reports-timeline-track { overflow: hidden; }
+.reports-redesign-view .reports-timeline-item { transform: translateX(-50%); }
+
+@media (max-width: 1200px) {
+  .reports-redesign-view[data-reports-mode="quarter"] .reports-quarter-overview,
+  .reports-redesign-view .reports-chart-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .reports-redesign-view .reports-inflow-main { grid-template-columns: 1fr; }
+  .reports-redesign-view .reports-bar-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .reports-redesign-view .reports-bar-track { grid-column: 1 / -1; }
+  .reports-redesign-view .reports-timeline-scale,
+  .reports-redesign-view .reports-timeline-row { grid-template-columns: 1fr; }
+  .reports-redesign-view .reports-timeline-scale-spread,
+  .reports-redesign-view .reports-timeline-track { grid-column: 1; }
+}
