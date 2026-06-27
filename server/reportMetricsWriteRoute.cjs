@@ -1,4 +1,5 @@
 const store = require('./reportEventStore.cjs');
+const { reportAccess } = require('./reportMetricsGuard.cjs');
 
 function send(res, status, value) {
   if (res.writableEnded || res.destroyed) return;
@@ -32,6 +33,11 @@ async function handleReportMetricsWrite(req, res, url, dbPath) {
   const route = url.pathname;
   if (!['/api/case-extra-flags', '/api/report-metric-events'].includes(route)) return false;
   await store.ensureSchema(dbPath);
+  const access = await reportAccess(req, dbPath);
+  if (!access) {
+    send(res, 401, { error: 'auth_required' });
+    return true;
+  }
 
   if (route === '/api/case-extra-flags' && req.method === 'GET') {
     const caseId = Number(url.searchParams.get('case_id') || 0);
