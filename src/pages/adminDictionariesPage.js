@@ -1,5 +1,7 @@
 const DICTIONARY_CATEGORIES = [
   ['case_category', 'Категории дел'],
+  ['claim_subject', 'Предметы спора'],
+  ['case_party', 'Истцы и ответчики'],
   ['procedural_position', 'Процессуальные положения'],
   ['court', 'Суды'],
   ['stage', 'Результаты рассмотрения'],
