@@ -4,6 +4,7 @@ import { initDashboard } from './dashboard/dashboard.js';
 import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
 import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
 import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.js';
+import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -37,6 +38,7 @@ export function initApp() {
     initCaseUiEnhancements();
     initAppealCalculatorUiFix();
     initAppealTaskDateBridge();
+    initAppealActionCleanup();
     initLegalFieldSuggestions();
     initGeneralCasesPage();
     initControlledCasesPage();
