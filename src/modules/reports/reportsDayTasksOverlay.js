@@ -49,7 +49,7 @@ async function loadTasks() {
   groups.flat().forEach(task => {
     if (String(task.event_scope || 'work') === 'personal') return;
     if (!coversDate(task, date)) return;
-    const key = String(task.id || `${task.date_str || task.date}|${task.time_val || task.time}|${task.description || task.desc}`);
+    const key = String(task.id || `${taskDate(task)}|${taskTime(task)}|${task.description || task.desc}`);
     map.set(key, task);
   });
   state.tasks = [...map.values()].sort((a, b) => String(taskTime(a)).localeCompare(String(taskTime(b))));
@@ -140,10 +140,19 @@ function hideOverlay() {
 
 function coversDate(task, date) {
   const start = taskDate(task);
-  const end = String(task.end_date || start);
+  const end = normalizeDate(task.end_date) || start;
   return Boolean(start && start <= date && end >= date);
 }
-function taskDate(task) { return String(task.date_str || task.date || '').slice(0, 10); }
+function taskDate(task) { return normalizeDate(task.date_str || task.date || task.start_date); }
+function normalizeDate(value) {
+  const text = String(value || '').trim();
+  let match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  match = text.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 function taskTime(task) { return String(task.time_val || task.time || '').trim(); }
 function taskOwner(task) { return String(task.user_name || task.user || task.delegated_to || '').trim(); }
 function taskLabel(task) { return String(task.task_type || task.type || 'Рабочая задача').replaceAll('_', ' '); }
