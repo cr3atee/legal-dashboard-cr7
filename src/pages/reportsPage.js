@@ -102,55 +102,61 @@ export function renderReportsPage() {
         </section>
       </section>
 
-      <section class="reports-mode-panel" data-reports-quarter-panel hidden>
+      <section class="reports-mode-panel reports-quarter-reference" data-reports-quarter-panel hidden>
+        <header class="reports-quarter-reference-head">
+          <div>
+            <h2>Квартальный отчёт</h2>
+            <p>Динамика судебной работы, исполнители и структура дел за выбранный период.</p>
+          </div>
+          <span class="reports-quarter-badge" data-reports-quarter-badge>Квартал не выбран</span>
+        </header>
+
+        <section class="reports-quarter-kpi-grid" data-reports-quarter-kpis></section>
+
         <section class="reports-quarter-overview">
-          <article class="panel reports-card reports-inflow-card">
-            <div class="reports-card-head">
+          <article class="panel reports-card reports-quarter-inflow-card">
+            <div class="reports-card-head reports-quarter-card-head">
               <div>
                 <h3>Поступило за квартал</h3>
-                <p class="muted">Квартальные и накопительные значения из API.</p>
+                <p class="muted">Количество новых дел по месяцам и сравнение с прошлым годом.</p>
               </div>
+              <div class="reports-quarter-total-badge" data-reports-quarter-total-badge></div>
             </div>
-            <div class="reports-inflow" data-reports-quarter-inflow></div>
+            <div class="reports-quarter-legend" aria-hidden="true">
+              <span><i></i>Текущий квартал</span>
+              <span><i></i>Аналогичный период прошлого года</span>
+            </div>
+            <div class="reports-quarter-months" data-reports-quarter-months></div>
+            <div class="reports-quarter-month-footer" data-reports-quarter-month-footer></div>
           </article>
 
-          <article class="panel reports-card">
+          <article class="panel reports-card reports-quarter-summary-card">
             <div class="reports-card-head">
               <div>
                 <h3>Общие итоги судебного отдела</h3>
                 <p class="muted">Сравнение с аналогичным периодом прошлого года.</p>
               </div>
             </div>
-            <div class="reports-table-wrap">
-              <table class="reports-table reports-summary-table">
-                <thead>
-                  <tr>
-                    <th>Показатель</th>
-                    <th>Значение</th>
-                    <th>Динамика к аналогичному периоду прошлого года</th>
-                  </tr>
-                </thead>
-                <tbody data-reports-quarter-totals></tbody>
-              </table>
-            </div>
+            <div class="reports-quarter-summary" data-reports-quarter-totals></div>
           </article>
         </section>
 
-        <article class="panel reports-card">
+        <article class="panel reports-card reports-executors-card">
           <div class="reports-card-head">
             <div>
               <h3>Отчёт по исполнителям</h3>
-              <p class="muted">Исполнитель, категория спора, квартал и накопление с начала года.</p>
+              <p class="muted">Выполнение плана по категориям спора за выбранный квартал.</p>
             </div>
           </div>
           <div class="reports-table-wrap">
-            <table class="reports-table">
+            <table class="reports-table reports-executor-table">
               <thead>
                 <tr>
                   <th>Исполнитель</th>
                   <th>Категория спора</th>
-                  <th>За выбранный квартал</th>
+                  <th>За квартал</th>
                   <th>С начала года</th>
+                  <th>Выполнение</th>
                 </tr>
               </thead>
               <tbody data-reports-executor-report></tbody>
@@ -162,12 +168,12 @@ export function renderReportsPage() {
           <div class="reports-card-head">
             <div>
               <h3>Структура судебных дел по категориям и предмету спора</h3>
-              <p class="muted">Горизонтальная диаграмма и пояснительная таблица.</p>
+              <p class="muted">Распределение дел за выбранный квартал.</p>
             </div>
             <div class="reports-copy-actions">
               <button class="btn tiny" type="button" data-reports-copy="chart">Копировать диаграмму</button>
               <button class="btn tiny" type="button" data-reports-copy="table">Копировать таблицу</button>
-              <button class="btn tiny" type="button" data-reports-copy="both">Копировать диаграмму и таблицу</button>
+              <button class="btn tiny" type="button" data-reports-copy="both">Копировать всё</button>
             </div>
           </div>
           <div class="reports-chart-layout">
@@ -183,7 +189,7 @@ export function renderReportsPage() {
               </select>
             </label>
           </div>
-          <div class="reports-table-wrap">
+          <div class="reports-table-wrap reports-structure-table-wrap">
             <table class="reports-table" data-reports-structure-table>
               <thead>
                 <tr>
