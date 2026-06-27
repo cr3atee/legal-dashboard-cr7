@@ -3,6 +3,7 @@ import { calculateAppealDeadline, readAppealRow } from './appealDeadlineMath.js'
 let timer = null;
 
 export function initAppealCalculatorUiFix() {
+  patchDeadlineAlert();
   document.addEventListener('click', event => {
     const button = event.target.closest?.('[data-general-calc-row]');
     if (!button) return;
@@ -19,6 +20,25 @@ export function initAppealCalculatorUiFix() {
   const root = document.querySelector('#cases');
   if (root) new MutationObserver(schedule).observe(root, { childList: true, subtree: true });
   schedule();
+}
+
+function patchDeadlineAlert() {
+  if (window.__correctAppealDeadlineAlert) return;
+  window.__correctAppealDeadlineAlert = true;
+  const original = window.alert.bind(window);
+  window.alert = message => {
+    const text = String(message || '');
+    const isDeadlineMessage = text.includes('Сроки будут добавлены в план и календарь') || text.startsWith('Последний срок подачи жалобы');
+    const dialogOpen = Boolean(document.querySelector('[data-general-dialog][open], [data-general-dialog].is-open'));
+    if (isDeadlineMessage && dialogOpen) {
+      const lines = deadlineLines();
+      if (lines.length) {
+        original(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`);
+        return;
+      }
+    }
+    original(message);
+  };
 }
 
 function schedule() {
@@ -59,13 +79,21 @@ function renderRow(row) {
   </div>`;
 }
 
-function renderSuggestions() {
-  const node = document.querySelector('[data-general-appeal-suggestions]');
-  if (!node) return;
-  const rows = [...document.querySelectorAll('[data-general-appeal-row]')]
+function deadlineRows() {
+  return [...document.querySelectorAll('[data-general-appeal-row]')]
     .map(readAppealRow)
     .map(data => ({ data, result: calculateAppealDeadline(data) }))
     .filter(item => item.result?.dateRu);
+}
+
+function deadlineLines() {
+  return deadlineRows().map(item => `${item.data.appeal_kind}: последний срок подачи жалобы — ${item.result.dateRu}`);
+}
+
+function renderSuggestions() {
+  const node = document.querySelector('[data-general-appeal-suggestions]');
+  if (!node) return;
+  const rows = deadlineRows();
   if (!rows.length) return;
   node.hidden = false;
   node.innerHTML = `<h5>Автоматически будут добавлены в план и календарь:</h5>${rows.map(item => `<div class="general-appeal-suggestion"><b>${html(item.result.dateRu)}</b><span>Последний день подачи ${html(item.data.appeal_kind.toLowerCase())}</span></div>`).join('')}`;
