@@ -140,9 +140,10 @@ function syncFormWithRow(row) {
     appeals = Array.isArray(parsed) ? parsed : [];
   } catch {}
   [...document.querySelectorAll('[data-general-appeal-row]')].forEach((node, index) => {
-    const appeal = appeals[index] || {};
-    node.dataset.metricCounterId = appeal.counter_id || node.dataset.metricCounterId || randomId();
-    node.dataset.metricCreatedAt = appeal.counter_created_at || node.dataset.metricCreatedAt || new Date().toISOString();
+    const appeal = appeals[index];
+    const legacyId = appeal ? `legacy-${index + 1}` : '';
+    node.dataset.metricCounterId = appeal?.counter_id || node.dataset.metricCounterId || legacyId || randomId();
+    node.dataset.metricCreatedAt = appeal?.counter_created_at || node.dataset.metricCreatedAt || new Date().toISOString();
   });
 }
 
