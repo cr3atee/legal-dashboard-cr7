@@ -1,4 +1,5 @@
 const store = require('./reportEventStore.cjs');
+const { reportAccess } = require('./reportMetricsGuard.cjs');
 
 function send(res, status, value) {
   if (res.writableEnded || res.destroyed) return;
@@ -6,9 +7,8 @@ function send(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-async function scopeNames(dbPath, url) {
-  const employee = String(url.searchParams.get('employee') || '').trim();
-  if (employee) return [employee];
+async function scopeNames(dbPath, url, access) {
+  if (!access.manageAll) return [String(access.session.full_name || '').trim()].filter(Boolean);
   if (url.searchParams.get('all') === '1') return [];
   const ids = String(url.searchParams.get('user_ids') || url.searchParams.get('user_id') || '')
     .split(',').map(Number).filter(Number.isFinite).filter(Boolean);
@@ -22,10 +22,15 @@ async function scopeNames(dbPath, url) {
 async function handleReportMetrics(req, res, url, dbPath) {
   if (url.pathname !== '/api/report-metrics' || req.method !== 'GET') return false;
   await store.ensureSchema(dbPath);
+  const access = await reportAccess(req, dbPath);
+  if (!access) {
+    send(res, 401, { error: 'auth_required' });
+    return true;
+  }
   const year = Number(url.searchParams.get('year')) || new Date().getFullYear();
   const quarter = Math.min(4, Math.max(1, Number(url.searchParams.get('quarter')) || Math.floor(new Date().getMonth() / 3) + 1));
   const reportDate = url.searchParams.get('report_date') || new Date().toISOString();
-  const data = await store.summary(dbPath, { year, quarter, reportDate, scopeNames: await scopeNames(dbPath, url) });
+  const data = await store.summary(dbPath, { year, quarter, reportDate, scopeNames: await scopeNames(dbPath, url, access) });
   send(res, 200, { ok: true, year, quarter, report_date: reportDate, reset_rule: '30-12', ...data });
   return true;
 }
