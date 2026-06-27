@@ -1,6 +1,5 @@
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
-import { initDomCollectionCompat } from './core/domCollectionCompat.js';
 import { initDashboard } from './dashboard/dashboard.js';
 import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
 import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
@@ -30,7 +29,6 @@ export function initApp() {
   initAuthGate(session => {
     document.querySelector('#app').innerHTML = renderAppLayout(session);
 
-    initDomCollectionCompat();
     initAuthUi();
     initThemeUi();
     initSidebarCollapse();
