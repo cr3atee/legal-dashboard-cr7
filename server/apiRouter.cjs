@@ -1,0 +1,16 @@
+const core = require('./sqliteApi.cjs');
+const { ensureReportMetricsSchema, handleReportMetrics } = require('./reportMetricsRoute.cjs');
+const { handleReportMetricsWrite } = require('./reportMetricsWriteRoute.cjs');
+
+async function ensureSchema(dbPath) {
+  await core.ensureSchema(dbPath);
+  await ensureReportMetricsSchema(dbPath);
+}
+
+async function handleApiRequest(req, res, url, dbPath) {
+  if (await handleReportMetrics(req, res, url, dbPath)) return true;
+  if (await handleReportMetricsWrite(req, res, url, dbPath)) return true;
+  return core.handleApiRequest(req, res, url, dbPath);
+}
+
+module.exports = { ensureSchema, handleApiRequest };
