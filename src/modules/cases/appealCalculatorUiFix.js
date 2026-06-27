@@ -9,7 +9,7 @@ export function initAppealCalculatorUiFix() {
     if (!button) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    renderRow(button.closest('[data-general-appeal-row]'));
+    renderRow(button.closest('[data-general-appeal-row]'), true);
   }, true);
   document.addEventListener('input', event => {
     if (event.target.closest?.('[data-general-appeal-row]')) schedule();
@@ -45,17 +45,21 @@ function schedule() {
   clearTimeout(timer);
   timer = setTimeout(() => {
     document.querySelectorAll('[data-general-print-row], [data-general-restore-template]').forEach(node => node.remove());
-    document.querySelectorAll('[data-general-appeal-row]').forEach(renderRow);
+    document.querySelectorAll('[data-general-appeal-row]').forEach(row => renderRow(row));
     renderSuggestions();
   }, 25);
 }
 
-function renderRow(row) {
+function renderRow(row, force = false) {
   if (!row) return;
   const data = readAppealRow(row);
   const node = row.querySelector('[data-general-appeal-row-result]');
   if (!node) return;
   const result = calculateAppealDeadline(data);
+  const signature = JSON.stringify({ data, result });
+  if (!force && row.dataset.correctDeadlineSignature === signature) return;
+  row.dataset.correctDeadlineSignature = signature;
+
   if (result?.noCalendarPeriod) {
     node.innerHTML = '<div class="general-appeal-result-structured"><p><b>Календарный срок автоматически не рассчитывается.</b></p></div>';
     return;
@@ -94,7 +98,14 @@ function renderSuggestions() {
   const node = document.querySelector('[data-general-appeal-suggestions]');
   if (!node) return;
   const rows = deadlineRows();
-  if (!rows.length) return;
+  const signature = JSON.stringify(rows.map(item => [item.data.appeal_kind, item.result.dateRu]));
+  if (node.dataset.correctSuggestionSignature === signature) return;
+  node.dataset.correctSuggestionSignature = signature;
+  if (!rows.length) {
+    node.hidden = true;
+    node.innerHTML = '';
+    return;
+  }
   node.hidden = false;
   node.innerHTML = `<h5>Автоматически будут добавлены в план и календарь:</h5>${rows.map(item => `<div class="general-appeal-suggestion"><b>${html(item.result.dateRu)}</b><span>Последний день подачи ${html(item.data.appeal_kind.toLowerCase())}</span></div>`).join('')}`;
 }
