@@ -53,6 +53,7 @@ async function loadTasks() {
     map.set(key, task);
   });
   state.tasks = [...map.values()].sort((a, b) => String(taskTime(a)).localeCompare(String(taskTime(b))));
+  if (!state.tasks.length) state.open = false;
   renderOverlay(date);
 }
 
@@ -71,7 +72,7 @@ function renderOverlay(date) {
   if (!timeline) return;
   state.timeline = timeline;
   timeline.style.visibility = 'hidden';
-  timeline.style.minHeight = '190px';
+  timeline.style.minHeight = state.open ? `${Math.min(530, 205 + state.tasks.length * 70)}px` : '190px';
   const overlay = ensureOverlay();
   overlay.hidden = false;
   overlay.innerHTML = `
@@ -131,7 +132,10 @@ function positionOverlay() {
 
 function hideOverlay() {
   if (state.overlay) state.overlay.hidden = true;
-  if (state.timeline) state.timeline.style.visibility = '';
+  if (state.timeline) {
+    state.timeline.style.visibility = '';
+    state.timeline.style.minHeight = '';
+  }
 }
 
 function coversDate(task, date) {
