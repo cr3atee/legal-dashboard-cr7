@@ -82,6 +82,7 @@ async function renderQuarterReference(root) {
   } catch (error) {
     console.warn('Quarter reports reference rendering failed:', error);
   } finally {
+    state.observer?.takeRecords();
     state.applying = false;
   }
 }
