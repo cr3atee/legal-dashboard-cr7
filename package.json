@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "vite --config vite.report.config.js --host 0.0.0.0",
     "build": "npm run build:map && vite build",
     "build:app": "vite build",
     "build:map": "npm --prefix external/your-map-source run build && node scripts/sync-map-build.cjs",
@@ -29,7 +29,7 @@
     "electron": "latest",
     "electron-builder": "latest"
   },
-  "main": "electron/main.cjs",
+  "main": "electron/extended-main.cjs",
   "build": {
     "appId": "ru.legal.dashboard",
     "productName": "Legal Dashboard",
