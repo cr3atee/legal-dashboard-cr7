@@ -87,6 +87,9 @@ function showFor(target) {
   const popup = ensurePopup();
   popup.innerHTML = matches.map(item => `<button type="button" data-legal-suggestion="${escapeAttr(item.value)}">${escapeHtml(item.value)}</button>`).join('');
   popup.hidden = false;
+  try {
+    if (typeof popup.showPopover === 'function' && !popup.matches(':popover-open')) popup.showPopover();
+  } catch {}
   position();
 }
 
@@ -103,6 +106,7 @@ function ensurePopup() {
   const popup = document.createElement('div');
   popup.className = 'legal-field-suggestions';
   popup.dataset.legalSuggestions = '1';
+  popup.setAttribute('popover', 'manual');
   popup.hidden = true;
   document.body.append(popup);
   state.popup = popup;
@@ -132,6 +136,9 @@ function choose(value) {
 
 function hide() {
   if (!state.popup) return;
+  try {
+    if (typeof state.popup.hidePopover === 'function' && state.popup.matches(':popover-open')) state.popup.hidePopover();
+  } catch {}
   state.popup.hidden = true;
   state.popup.innerHTML = '';
   state.input = null;
