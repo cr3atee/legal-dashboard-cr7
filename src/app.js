@@ -63,10 +63,10 @@ export function initApp() {
     initAdminUsersPage();
     initAdminDictionariesPage();
     initMapFullscreenButton();
+    initAssignmentNotificationOpen();
     initUtilityPanels();
     initUserRequestedEnhancements();
     initLatestUserRequirements();
-    initAssignmentNotificationOpen();
     initRoleUiPolicy();
     initCaseNumberAutoYear();
   });
