@@ -28,6 +28,7 @@ import { initUtilityPanels } from './modules/utility/utilityPanelsController.js'
 import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
 import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
 import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
+import { initNotificationViewedTab } from './modules/workflow/notificationViewedTab.js';
 import { initRoleUiPolicy } from './modules/workflow/roleUiPolicy.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
@@ -65,6 +66,7 @@ export function initApp() {
     initMapFullscreenButton();
     initAssignmentNotificationOpen();
     initUtilityPanels();
+    initNotificationViewedTab();
     initUserRequestedEnhancements();
     initLatestUserRequirements();
     initRoleUiPolicy();
