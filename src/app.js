@@ -12,6 +12,7 @@ import { initGeneralCasesPage } from './modules/cases/generalCasesController.js'
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
+import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
@@ -26,6 +27,7 @@ import { initUtilityPanels } from './modules/utility/utilityPanelsController.js'
 import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
 import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
 import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
+import { initRoleUiPolicy } from './modules/workflow/roleUiPolicy.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
@@ -47,6 +49,7 @@ export function initApp() {
     initGeneralCasesPage();
     initControlledCasesPage();
     initEnforcementPage();
+    initCalendarSelectedUserOnly();
     initCalendarPage();
     initSchedulePage();
     initEmergencyFundPage();
@@ -62,6 +65,7 @@ export function initApp() {
     initUserRequestedEnhancements();
     initLatestUserRequirements();
     initAssignmentNotificationOpen();
+    initRoleUiPolicy();
     initCaseNumberAutoYear();
   });
 }
