@@ -1,0 +1,223 @@
+.calendar-week-new-row .calendar-executor-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+}
+
+.calendar-week-new-row .calendar-executor-inline > span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.calendar-week-new-row .calendar-executor-inline select {
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.legal-field-suggestions {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.appeal-motivated-date-compact {
+  min-width: 0;
+}
+
+.appeal-motivated-date-compact .appeal-date-delete-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.appeal-motivated-date-compact input {
+  width: min(205px, 100%) !important;
+  min-width: 175px;
+}
+
+.appeal-event-delete-cross {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.appeal-kind-highlight select,
+.appeal-kind-highlight input {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  box-shadow: 0 0 0 2px rgb(59 130 246 / 8%);
+}
+
+.cases-default-view-button {
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.case-category-pill {
+  --category-hue: 215;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid hsl(var(--category-hue) 72% 82%);
+  border-radius: 10px;
+  background: hsl(var(--category-hue) 85% 96%);
+  color: hsl(var(--category-hue) 72% 38%);
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.case-category-pill-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.user-enhancement-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 0;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 28%);
+}
+
+.user-enhancement-dialog::backdrop {
+  background: rgb(15 23 42 / 40%);
+  backdrop-filter: blur(2px);
+}
+
+.user-enhancement-dialog h3 {
+  margin: 0 0 10px;
+}
+
+.user-enhancement-dialog p {
+  margin: 0 0 20px;
+}
+
+.user-enhancement-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.reports-linked-count,
+.reports-remaining-link {
+  border: 0;
+  border-radius: 10px;
+  background: #eaf1ff;
+  color: #1749c6;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reports-linked-count {
+  min-width: 42px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 18px;
+}
+
+.reports-remaining-link {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 7px 10px;
+}
+
+.reports-linked-count:hover,
+.reports-remaining-link:hover {
+  background: #dbe8ff;
+}
+
+.reports-linked-hint {
+  margin: 10px 0 0;
+  color: #64748b;
+}
+
+.reports-controlled-two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reports-controlled-two-column .reports-list-row {
+  width: 100%;
+  text-align: left;
+}
+
+.reports-user-list-dialog {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.user-list-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.user-list-dialog-head h3,
+.user-list-dialog-head p {
+  margin: 0;
+}
+
+.user-list-dialog-head p {
+  margin-top: 6px;
+  color: #64748b;
+}
+
+.user-list-dialog-body {
+  display: grid;
+  gap: 10px;
+  max-height: 55vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 18px;
+}
+
+.user-list-row {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #dbe4f3;
+  border-radius: 14px;
+  background: #fff;
+  color: #183153;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-list-row:hover {
+  border-color: #8fb2ff;
+  background: #f5f8ff;
+}
+
+.user-list-row span {
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .calendar-week-new-row .calendar-executor-inline {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .calendar-week-new-row .calendar-executor-inline select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .reports-controlled-two-column {
+    grid-template-columns: 1fr;
+  }
+}
