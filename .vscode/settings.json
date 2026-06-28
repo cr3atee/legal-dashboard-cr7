@@ -1,0 +1,43 @@
+{
+"files.watcherExclude": {
+"**/.git/objects/**": true,
+"**/.git/subtree-cache/**": true,
+"**/node_modules/**": true,
+"**/dist/**": true,
+"**/release/**": true,
+"**/backups/**": true,
+"**/data/uploads/**": true,
+"**/*.db": true,
+"**/*.sqlite": true,
+"**/*.sqlite3": true,
+"**/*.exe": true,
+"**/*.blockmap": true,
+"**/*.log": true,
+"**/*.map": true
+},
+"search.exclude": {
+"**/.git": true,
+"**/node_modules": true,
+"**/dist": true,
+"**/release": true,
+"**/backups": true,
+"**/data/uploads": true,
+"**/*.db": true,
+"**/*.sqlite": true,
+"**/*.sqlite3": true,
+"**/*.exe": true,
+"**/*.blockmap": true,
+"**/*.log": true,
+"**/*.map": true,
+"**/legal-dashboard-1.006-menu-widgets-themes": true
+},
+"files.exclude": {
+"**/node_modules": true,
+"**/dist": true,
+"**/release": true,
+"**/*.blockmap": true,
+"**/*.map": true
+},
+"search.followSymlinks": false,
+"git.autoRepositoryDetection": "openEditors"
+}
