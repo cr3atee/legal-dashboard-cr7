@@ -3,33 +3,89 @@ import './styles/latest-user-requirements.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
+import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
+import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
+import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.js';
+import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js';
+import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
+import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
+import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
+import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
+import { initCalendarPage } from './modules/calendar/calendarController.js';
+import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
+import { initSchedulePage } from './modules/schedule/scheduleController.js';
+import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
+import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
+import { initMeetingsPage } from './modules/meetings/meetingsController.js';
+import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js';
+import { initReportsPage } from './modules/reports/reportsController.js';
+import { initReportsQuarterController } from './modules/reports/reportsQuarterController.js';
+import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
+import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
+import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
+import { initUtilityPanels } from './modules/utility/utilityPanelsController.js';
+import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
+import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
+import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
+import { initNotificationViewedTab } from './modules/workflow/notificationViewedTab.js';
+import { initParticipantCaseCreateGuard } from './modules/workflow/participantCaseCreateGuard.js';
+import { initRoleUiPolicy } from './modules/workflow/roleUiPolicy.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
 
 export function initApp() {
   initAuthGate(session => {
-    const root = document.querySelector('#app');
-    root.innerHTML = renderAppLayout(session);
+    document.querySelector('#app').innerHTML = renderAppLayout(session);
 
-    // Безопасная загрузка: сначала запускается только оболочка приложения.
-    // Ранее один из дополнительных модулей входил в бесконечный синхронный цикл
-    // сразу после авторизации и полностью блокировал вкладку браузера.
-    runSafeInitializer('auth-ui', initAuthUi);
-    runSafeInitializer('theme-ui', initThemeUi);
-    runSafeInitializer('sidebar', initSidebarCollapse);
-    runSafeInitializer('router', initRouter);
-    runSafeInitializer('dashboard', initDashboard);
-
-    root.dataset.appBootState = 'ready';
-    window.dispatchEvent(new CustomEvent('app:boot-ready', { detail: { session } }));
+    initAuthUi();
+    initThemeUi();
+    initSidebarCollapse();
+    initRouter();
+    initDashboard();
+    initCaseUiEnhancements();
+    initAppealCalculatorUiFix();
+    initAppealTaskDateBridge();
+    initAppealActionCleanup();
+    initLegalFieldSuggestions();
+    initParticipantCaseCreateGuard();
+    initGeneralCasesPage();
+    initControlledCasesPage();
+    initEnforcementPage();
+    initCalendarSelectedUserOnly();
+    initCalendarPage();
+    initSchedulePage();
+    initEmergencyFundPage();
+    initMunicipalRegistryPage();
+    initMeetingsPage();
+    initMeetingsWorkflowUi();
+    initReportsPage();
+    initReportsQuarterController();
+    initAdminUsersPage();
+    initAdminDictionariesPage();
+    initMapFullscreenButton();
+    initAssignmentNotificationOpen();
+    initUtilityPanels();
+    initNotificationViewedTab();
+    initUserRequestedEnhancements();
+    initLatestUserRequirements();
+    initRoleUiPolicy();
+    initCaseNumberAutoYear();
   });
 }
 
-function runSafeInitializer(name, initializer) {
-  try {
-    initializer();
-  } catch (error) {
-    console.error(`[app boot] ${name} failed`, error);
-  }
+function initCaseNumberAutoYear() {
+  if (window.__caseNumberAutoYearInitialized) return;
+  window.__caseNumberAutoYearInitialized = true;
+  document.addEventListener('input', event => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const name = String(input.name || '').toLowerCase();
+    const label = input.closest('label')?.textContent?.toLowerCase() || '';
+    const isPkField = name === 'case_no' || name === 'pk_number' || name === 'case_number' || label.includes('№ пк');
+    if (!isPkField) return;
+    const value = String(input.value || '');
+    if (!value.endsWith('/')) return;
+    input.value = `${value}${new Date().getFullYear()}`;
+  });
 }
