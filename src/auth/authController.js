@@ -86,7 +86,7 @@ function renderLoginScreen(onAuthenticated) {
   const card = root.querySelector('[data-login-card]');
   const lock = root.querySelector('[data-login-lock]');
   const passwordToggle = root.querySelector('[data-login-password-toggle]');
-  const visual = initLoginParticleVisual(root.querySelector('.login-visual'));
+  let visual = initLoginParticleVisual(root.querySelector('.login-visual'));
   const input = form.elements.password;
   input.focus();
 
@@ -123,14 +123,26 @@ function renderLoginScreen(onAuthenticated) {
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     button.textContent = 'Проверка...';
+
+    // Критично: останавливаем тяжёлый canvas-рендер ДО запроса авторизации.
+    // Именно он блокировал главный поток браузера и вызывал «страница не отвечает».
+    try { visual.destroy(); } catch {}
+    visual = createNoopVisual();
+    root.querySelector('[data-login-particle-canvas]')?.setAttribute('hidden', '');
     setLoginState(card, errorNode, lock, visual, 'checking', 'Выполняется проверка доступа.');
+
+    // Даём браузеру отрисовать новое состояние до сетевого запроса.
+    await new Promise(resolve => requestAnimationFrame(() => resolve()));
 
     let session;
     try {
-      session = await dbApi.login(password);
+      session = await Promise.race([
+        dbApi.login(password),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Превышено время ожидания ответа сервера.')), 15000))
+      ]);
     } catch (error) {
       console.error('Login request failed:', error);
-      setLoginState(card, errorNode, lock, visual, 'error', 'Неверный пароль.');
+      setLoginState(card, errorNode, lock, visual, 'error', error?.message || 'Неверный пароль.');
       input.select();
       button.disabled = false;
       button.textContent = 'Войти';
@@ -138,12 +150,8 @@ function renderLoginScreen(onAuthenticated) {
     }
 
     setLoginState(card, errorNode, lock, visual, 'success', 'Доступ подтверждён.');
-
-    // После успешного ответа вход выполняется сразу. Анимация больше не может
-    // задержать или заблокировать открытие главного экрана.
     setAuthSession(session);
     window.legalDashboardSession = session;
-    try { visual.destroy(); } catch {}
 
     try {
       onAuthenticated(session);
@@ -232,6 +240,14 @@ function setLoginState(card, errorNode, lock, visual, state, message = '') {
   }
 
   if (state !== 'success') visual.setState(state);
+}
+
+function createNoopVisual() {
+  return {
+    setState() { return Promise.resolve(); },
+    showSuccessText() { return Promise.resolve(); },
+    destroy() {}
+  };
 }
 
 function escapeHtml(value) {
