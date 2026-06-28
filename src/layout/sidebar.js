@@ -1,5 +1,7 @@
 import { canViewRoute } from '../core/permissions.js';
 
+const TEMPORARILY_HIDDEN_VIEWS = new Set(['map']);
+
 const NAV_ITEMS = [
   ["dashboard", iconDashboard(), "Главная"],
   ["cases", iconCaseList(), "Общий перечень дел"],
@@ -27,7 +29,7 @@ export function renderSidebar() {
       </div>
 
       <nav class="nav">
-        ${NAV_ITEMS.filter(([view]) => canViewRoute(view)).map(([view, icon, label]) => `
+        ${NAV_ITEMS.filter(([view]) => !TEMPORARILY_HIDDEN_VIEWS.has(view) && canViewRoute(view)).map(([view, icon, label]) => `
           <button class="nav-btn ${view === 'dashboard' ? 'active' : ''}" data-view="${view}" title="${label}">
             <span class="ico" aria-hidden="true">${icon}</span>
             <span class="label">${label}</span>
