@@ -61,34 +61,30 @@ async function refreshCards(root) {
   const selectedDate = root.querySelector('[data-reports-date]')?.value || todayIso();
   applying = true;
   try {
-    await Promise.all(cards.map(card => refreshCard(card, selectedDate)));
+    const [allPlanRows, selectedDayRows] = await Promise.all([
+      dbApi.getCalendarTasks({ start: '2000-01-01', end: selectedDate }),
+      dbApi.getCalendarTasks({ date: selectedDate })
+    ]);
+    const planRows = mergeTasks(allPlanRows, selectedDayRows);
+    cards.forEach(card => refreshCardFromPlan(card, selectedDate, planRows));
+  } catch (error) {
+    console.warn('Не удалось получить задачи блока «План на неделю» для отчётов:', error);
   } finally {
     applying = false;
   }
 }
 
-async function refreshCard(card, selectedDate) {
+function refreshCardFromPlan(card, selectedDate, planRows) {
   const name = card.querySelector('.reports-employee-head h4')?.textContent?.trim() || '';
   if (!name) return;
 
-  let allRows = [];
-  let dayRows = [];
-  try {
-    [allRows, dayRows] = await Promise.all([
-      dbApi.getCalendarTasks({ start: '2000-01-01', end: selectedDate, user: name }),
-      dbApi.getCalendarTasks({ date: selectedDate, user: name })
-    ]);
-  } catch {
-    return;
-  }
+  const rows = planRows.filter(task => taskBelongsToEmployee(task, name));
+  employeeTasks.set(employeeKey(name), rows);
 
-  const merged = mergeTasks(allRows, dayRows);
-  employeeTasks.set(employeeKey(name), merged);
-
-  const hearings = merged.filter(task => taskDate(task) === selectedDate && isHearing(task));
+  const hearings = rows.filter(task => taskDate(task) === selectedDate && isHearing(task));
   renderHearings(card, hearings, selectedDate);
 
-  const overdue = merged.filter(task => !isDone(task) && taskDate(task) && taskDate(task) < selectedDate);
+  const overdue = rows.filter(task => !isDone(task) && taskDate(task) && taskDate(task) < selectedDate);
   const overdueButton = card.querySelector('[data-reports-overdue-user]');
   if (overdueButton) {
     overdueButton.dataset.reportsOverdueUser = employeeKey(name);
@@ -96,9 +92,39 @@ async function refreshCard(card, selectedDate) {
     if (value) value.textContent = String(overdue.length);
   }
 
-  const completed = merged.filter(isDone);
+  const completed = rows.filter(isDone);
   addCompletedButton(card, name, completed.length);
   addPlanExclusionNote(card);
+}
+
+function taskBelongsToEmployee(task, employeeName) {
+  const expected = normalize(employeeName);
+  if (!expected) return false;
+
+  const candidates = [
+    task.user_name,
+    task.user,
+    task.full_name,
+    task.owner_name,
+    task.employee,
+    task.executor,
+    task.representative,
+    task.case_executor,
+    task.assigned_to_name,
+    task.assignee_name
+  ].map(normalize).filter(Boolean);
+
+  return candidates.some(value => namesMatch(value, expected));
+}
+
+function namesMatch(left, right) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leftParts = left.split(' ').filter(Boolean);
+  const rightParts = right.split(' ').filter(Boolean);
+  if (!leftParts.length || !rightParts.length) return false;
+  if (leftParts[0] !== rightParts[0]) return false;
+  return leftParts.slice(1).every((part, index) => !rightParts[index + 1] || part[0] === rightParts[index + 1][0]);
 }
 
 function renderHearings(card, rows, selectedDate) {
@@ -205,8 +231,8 @@ function mergeTasks(...groups) {
 }
 
 function isHearing(task) {
-  const type = normalize(task.task_type || task.type);
-  return type.includes('судебное') && type.includes('заседание');
+  const type = normalize(task.task_type || task.type || task.kind || task.event_type);
+  return (type.includes('судеб') && type.includes('засед')) || type === 'hearing';
 }
 
 function isDone(task) {
@@ -215,7 +241,7 @@ function isDone(task) {
 }
 
 function taskDate(task) {
-  const value = String(task.date_str || task.date || task.start_date || task.deadline || '').trim();
+  const value = String(task.date_str || task.date || task.start_date || task.deadline || task.event_date || '').trim();
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const ru = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
