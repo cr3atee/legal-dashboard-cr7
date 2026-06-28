@@ -17,7 +17,6 @@
               <button class="btn small" data-calendar-next type="button">›</button>
               <button class="btn small" data-calendar-today type="button">Сегодня</button>
             </div>
-            <label class="calendar-user-filter" hidden><span>Исполнитель</span><select data-calendar-user><option value="0">Только мой календарь</option></select></label>
           </div>
 
           <div class="calendar-main-card" data-calendar-main-card>
@@ -32,6 +31,12 @@
 
         <section class="calendar-week-card">
           <div class="calendar-week-new-row">
+            <label class="calendar-user-filter calendar-executor-inline" data-calendar-executor-control>
+              <span>Исполнители</span>
+              <select data-calendar-user>
+                <option value="0">Только мой календарь</option>
+              </select>
+            </label>
             <button class="btn small calendar-execution-toggle" data-calendar-execution-mode type="button" aria-pressed="false">Отметить исполнения</button>
             <button class="btn primary" data-calendar-new type="button">Новая запись</button>
           </div>
