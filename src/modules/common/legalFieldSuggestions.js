@@ -8,6 +8,9 @@ const state = {
   initialized: false,
   popup: null,
   input: null,
+  items: [],
+  activeIndex: -1,
+  listboxId: 'legal-field-suggestions-listbox',
   subjects: [],
   parties: [...DEFAULT_CASE_PARTIES],
   loading: null
@@ -19,10 +22,23 @@ export function initLegalFieldSuggestions() {
   ensurePopup();
   void loadSuggestions();
 
-  document.addEventListener('focusin', event => showFor(event.target));
-  document.addEventListener('input', event => showFor(event.target));
+  document.addEventListener('focusin', event => handleFocusIn(event.target));
+  document.addEventListener('input', event => updateSuggestions(event.target));
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && state.input === event.target) hide();
+    if (state.input !== event.target) return;
+    if (event.key === 'Escape') {
+      hide();
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveActive(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key === 'Enter' && state.activeIndex >= 0) {
+      event.preventDefault();
+      choose(state.items[state.activeIndex]?.value || '');
+    }
   });
   document.addEventListener('pointerdown', event => {
     const option = event.target.closest?.('[data-legal-suggestion]');
@@ -57,7 +73,28 @@ async function loadSuggestions(force = false) {
   return state.loading;
 }
 
-function showFor(target) {
+function handleFocusIn(target) {
+  if (target === state.input && !state.popup?.hidden) {
+    position();
+    return;
+  }
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+    if (!target?.closest?.('[data-legal-suggestions]')) hide();
+    return;
+  }
+  const kind = fieldKind(target);
+  if (!kind) {
+    hide();
+    return;
+  }
+  if (!normalize(target.value)) {
+    hide();
+    return;
+  }
+  updateSuggestions(target);
+}
+
+function updateSuggestions(target) {
   if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return;
   if (target.disabled || target.readOnly) return;
   const kind = fieldKind(target);
@@ -68,7 +105,7 @@ function showFor(target) {
   }
 
   const query = normalize(target.value);
-  if (!query && kind === 'subject') {
+  if (!query) {
     hide();
     return;
   }
@@ -84,12 +121,26 @@ function showFor(target) {
   }
 
   state.input = target;
+  state.items = matches;
+  state.activeIndex = matches.findIndex(item => normalize(item.value) === query);
+  if (state.activeIndex < 0) state.activeIndex = 0;
   const popup = ensurePopup();
-  popup.innerHTML = matches.map(item => `<button type="button" data-legal-suggestion="${escapeAttr(item.value)}">${escapeHtml(item.value)}</button>`).join('');
+  popup.innerHTML = matches.map((item, index) => `
+    <button
+      type="button"
+      id="${state.listboxId}-option-${index}"
+      role="option"
+      aria-selected="${index === state.activeIndex ? 'true' : 'false'}"
+      data-legal-suggestion="${escapeAttr(item.value)}"
+      data-legal-suggestion-index="${index}"
+    >${escapeHtml(item.value)}</button>
+  `).join('');
   popup.hidden = false;
+  applyInputA11y(target, popup);
   try {
     if (typeof popup.showPopover === 'function' && !popup.matches(':popover-open')) popup.showPopover();
   } catch {}
+  syncActiveOption();
   position();
 }
 
@@ -106,7 +157,9 @@ function ensurePopup() {
   const popup = document.createElement('div');
   popup.className = 'legal-field-suggestions';
   popup.dataset.legalSuggestions = '1';
+  popup.id = state.listboxId;
   popup.setAttribute('popover', 'manual');
+  popup.setAttribute('role', 'listbox');
   popup.hidden = true;
   document.body.append(popup);
   state.popup = popup;
@@ -135,13 +188,55 @@ function choose(value) {
 }
 
 function hide() {
+  clearInputA11y();
   if (!state.popup) return;
   try {
     if (typeof state.popup.hidePopover === 'function' && state.popup.matches(':popover-open')) state.popup.hidePopover();
   } catch {}
   state.popup.hidden = true;
   state.popup.innerHTML = '';
+  state.items = [];
+  state.activeIndex = -1;
   state.input = null;
+}
+
+function moveActive(step) {
+  if (!state.input || !state.items.length) return;
+  if (state.popup?.hidden) {
+    updateSuggestions(state.input);
+    return;
+  }
+  const total = state.items.length;
+  state.activeIndex = state.activeIndex < 0
+    ? 0
+    : (state.activeIndex + step + total) % total;
+  syncActiveOption();
+}
+
+function syncActiveOption() {
+  if (!state.popup) return;
+  state.popup.querySelectorAll('[data-legal-suggestion-index]').forEach(option => {
+    const isActive = Number(option.dataset.legalSuggestionIndex) === state.activeIndex;
+    option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    option.classList.toggle('is-active', isActive);
+    if (isActive) option.scrollIntoView({ block: 'nearest' });
+  });
+  if (state.input && state.activeIndex >= 0) {
+    state.input.setAttribute('aria-activedescendant', `${state.listboxId}-option-${state.activeIndex}`);
+  }
+}
+
+function applyInputA11y(input, popup) {
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-expanded', popup.hidden ? 'false' : 'true');
+  input.setAttribute('aria-controls', state.listboxId);
+}
+
+function clearInputA11y() {
+  if (!state.input) return;
+  state.input.setAttribute('aria-expanded', 'false');
+  state.input.removeAttribute('aria-activedescendant');
 }
 
 function score(value, query) {

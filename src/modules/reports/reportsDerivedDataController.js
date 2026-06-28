@@ -9,8 +9,6 @@ const state = {
   observer: null,
 };
 
-const PIE_COLORS = ['#356fe0', '#6d8ee8', '#88a6ed', '#a8bdf0', '#6ec8b4', '#ef9b68'];
-
 export function initReportsDerivedDataController() {
   initGeneralCaseReportEnhancements();
   const root = document.querySelector('[data-reports-root]');
@@ -97,47 +95,7 @@ function getMetricParams(root, session = {}) {
 
 function renderDay(root, data) {
   const rows = Array.isArray(data.day_hearings) ? data.day_hearings : [];
-  renderTimeline(root, rows);
   renderEmployeeHearings(root, rows);
-}
-
-function renderTimeline(root, rows) {
-  const node = root.querySelector('[data-reports-timeline]');
-  if (!node) return;
-  if (!rows.length) {
-    node.innerHTML = '<div class="reports-empty reports-empty-wide" data-persistent-report>На выбранную дату судебных заседаний нет.</div>';
-    return;
-  }
-
-  const normalized = rows.map(row => ({
-    employee: String(row.employee || row.representative || row.case_executor || 'Сотрудник не указан').trim(),
-    time: String(row.time || row.time_val || '').trim(),
-    court: String(row.court || 'Суд не указан').trim(),
-    subject: String(row.subject || row.result || row.claim_subject || row.case_no || 'Предмет не указан').trim(),
-  })).sort((a, b) => timeMinutes(a.time) - timeMinutes(b.time));
-  const groups = groupBy(normalized, row => row.employee);
-  const values = normalized.map(row => timeMinutes(row.time)).filter(Number.isFinite);
-  const start = values.length ? Math.max(0, Math.min(...values) - 60) : 8 * 60;
-  const end = values.length ? Math.min(1439, Math.max(...values) + 90) : 18 * 60;
-  const span = Math.max(60, end - start);
-
-  node.innerHTML = `
-    <div class="reports-timeline-scale reports-timeline-scale-fixed" data-persistent-report>
-      <span aria-hidden="true"></span>
-      <div class="reports-timeline-scale-spread"><span>${formatTime(start)}</span><span>${formatTime(start + span / 2)}</span><span>${formatTime(end)}</span></div>
-    </div>
-    ${[...groups.entries()].map(([employee, hearings]) => `
-      <div class="reports-timeline-row" data-persistent-report>
-        <strong title="${escapeAttr(employee)}">${escapeHtml(employee)}</strong>
-        <div class="reports-timeline-track">
-          ${hearings.map(row => {
-            const raw = ((timeMinutes(row.time) - start) / span) * 100;
-            const left = Number.isFinite(raw) ? Math.max(5, Math.min(88, raw)) : 5;
-            return `<span class="reports-timeline-item" style="left:${left}%" title="${escapeAttr(`${row.time} · ${row.court} · ${row.subject}`)}"><b>${escapeHtml(row.time || '—')}</b>${escapeHtml(row.court)}<small>${escapeHtml(row.subject)}</small></span>`;
-          }).join('')}
-        </div>
-      </div>`).join('')}
-  `;
 }
 
 function renderEmployeeHearings(root, rows) {
@@ -201,9 +159,32 @@ function renderInflowSummary(root, data) {
   if (badge) badge.innerHTML = `<span>Итого за квартал</span><div><strong>${formatNumber(total)} дел</strong></div>`;
   root.querySelector('.reports-quarter-legend')?.setAttribute('hidden', '');
   const months = root.querySelector('[data-reports-quarter-months]');
-  if (months) months.innerHTML = `<div class="reports-persistent-total"><span>Создано и зарегистрировано за выбранный квартал</span><strong>${formatNumber(total)}</strong><small>Архивирование и удаление не уменьшают показатель.</small></div>`;
+  const rows = Array.isArray(data.monthly_inflow) ? data.monthly_inflow : [];
+  if (months) {
+    const max = Math.max(...rows.map(row => Number(row.count || 0)), 1);
+    months.innerHTML = rows.length ? `
+      <div class="reports-month-inflow-chart">
+        ${rows.map(row => {
+          const count = Number(row.count || 0);
+          const height = Math.max(count ? 8 : 2, Math.round(count / max * 100));
+          return `<div class="reports-month-inflow-bar">
+            <b>${formatNumber(count)}</b>
+            <span><i style="height:${height}%"></i></span>
+            <em>${escapeHtml(row.label || '')}</em>
+          </div>`;
+        }).join('')}
+      </div>
+      <small class="reports-month-inflow-note">Архивирование и удаление не уменьшают показатель.</small>
+    ` : `<div class="reports-persistent-total"><span>Создано и зарегистрировано за выбранный квартал</span><strong>${formatNumber(total)}</strong><small>Архивирование и удаление не уменьшают показатель.</small></div>`;
+  }
   const footer = root.querySelector('[data-reports-quarter-month-footer]');
-  if (footer) footer.innerHTML = '<span>Новый годовой цикл начинается автоматически 30 декабря.</span>';
+  if (footer) {
+    const peak = rows.reduce((best, row) => Number(row.count || 0) > Number(best.count || 0) ? row : best, rows[0] || {});
+    const average = rows.length ? rows.reduce((sum, row) => sum + Number(row.count || 0), 0) / rows.length : 0;
+    footer.innerHTML = rows.length
+      ? `<span>Всего: <b>${formatNumber(total)}</b></span><span>Среднее: <b>${average.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}</b></span><span>Максимум: <b>${escapeHtml(peak.label || '')} (${formatNumber(peak.count || 0)})</b></span>`
+      : '<span>Новый годовой цикл начинается автоматически 30 декабря.</span>';
+  }
 }
 
 function renderDepartmentTotals(root, data) {
@@ -242,17 +223,28 @@ function renderExecutors(root, data) {
 function renderMarkerPie(root, data) {
   const chart = root.querySelector('[data-reports-structure-chart]');
   const legend = root.querySelector('[data-reports-subject-breakdown]');
-  if (!chart || !legend) return;
-  const rows = Array.isArray(data.marker_distribution) ? data.marker_distribution : [];
+  if (!chart) return;
+  const mode = root.querySelector('[data-reports-structure-sort]')?.value === 'category' ? 'category' : 'count';
+  const grouped = new Map();
+  (Array.isArray(data.category_subject_rows) ? data.category_subject_rows : []).forEach(row => {
+    const category = String(row.category || 'Без категории');
+    grouped.set(category, (grouped.get(category) || 0) + Number(row.count || 0));
+  });
+  const rows = [...grouped.entries()].map(([category, count]) => ({ category, count }))
+    .sort((a, b) => mode === 'category'
+      ? String(a.category).localeCompare(String(b.category), 'ru')
+      : Number(b.count) - Number(a.count) || String(a.category).localeCompare(String(b.category), 'ru'));
   const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  let cursor = 0;
-  const segments = rows.map((row, index) => {
-    const start = cursor;
-    cursor += total ? Number(row.count || 0) / total * 100 : 0;
-    return `${PIE_COLORS[index % PIE_COLORS.length]} ${start}% ${cursor}%`;
-  }).join(', ');
-  chart.innerHTML = `<div class="reports-marker-pie-shell"><div class="reports-marker-pie" style="background:${total ? `conic-gradient(${segments})` : '#e5edf7'}"><span><strong>${formatNumber(total)}</strong><small>пометок</small></span></div></div>`;
-  legend.innerHTML = `<h4>Пометки дел</h4><div class="reports-marker-legend">${rows.map((row, index) => `<div><i style="background:${PIE_COLORS[index % PIE_COLORS.length]}"></i><span>${escapeHtml(row.label)}</span><b>${formatNumber(row.count)}</b></div>`).join('')}</div>`;
+  const max = Math.max(...rows.map(row => Number(row.count || 0)), 1);
+  chart.innerHTML = rows.length ? `<div class="reports-column-chart">${rows.map(row => {
+    const height = Math.max(4, Math.round(Number(row.count || 0) / max * 100));
+    const share = total ? Number(row.count || 0) / total * 100 : 0;
+    return `<button type="button" class="reports-column-bar" data-quarter-category="${escapeAttr(row.category)}" style="--category-color:${categoryColor(row.category)}"><b>${formatNumber(row.count)} (${formatPercent(share)})</b><span class="reports-column-bar-track"><i style="height:${height}%"></i></span><span class="reports-column-bar-label">${escapeHtml(row.category)}</span></button>`;
+  }).join('')}</div>` : '<div class="reports-empty reports-empty-wide">Нет данных по структуре дел за выбранный период.</div>';
+  if (legend) {
+    legend.hidden = true;
+    legend.innerHTML = '';
+  }
 }
 
 function renderCategoryTable(root, data, period) {
@@ -263,7 +255,21 @@ function renderCategoryTable(root, data, period) {
   rows.sort((a, b) => mode === 'category'
     ? String(a.category).localeCompare(String(b.category), 'ru') || Number(b.count) - Number(a.count)
     : Number(b.count) - Number(a.count) || String(a.category).localeCompare(String(b.category), 'ru'));
-  body.innerHTML = rows.length ? rows.map(row => `<tr><td>${escapeHtml(row.category)}</td><td>${escapeHtml(row.subject)}</td><td><strong>${formatNumber(row.count)}</strong></td><td>${formatPercent(row.share)}</td><td>${escapeHtml(period)}</td></tr>`).join('') : '<tr><td colspan="5">Нет созданных дел за выбранный квартал.</td></tr>';
+  body.innerHTML = rows.length ? rows.map(row => `<tr><td><span class="reports-category-dot" style="background:${categoryColor(row.category)}"></span>${escapeHtml(row.category)}</td><td>${escapeHtml(row.subject)}</td><td><strong>${formatNumber(row.count)}</strong></td><td>${formatPercent(row.share)}</td><td>${escapeHtml(period)}</td></tr>`).join('') : '<tr><td colspan="5">Нет созданных дел за выбранный квартал.</td></tr>';
+}
+
+function categoryColor(category) {
+  const key = String(category || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('ru-RU');
+  const fixed = {
+    'выморочка': '#7C3AED',
+    'отзыв показать': '#0D9488',
+    'аварийный фонд': '#EA580C',
+  };
+  if (fixed[key]) return fixed[key];
+  const palette = ['#2563EB', '#16A34A', '#DB2777', '#9333EA', '#0891B2', '#CA8A04', '#4F46E5', '#DC2626'];
+  let hash = 0;
+  for (const char of key) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return palette[Math.abs(hash) % palette.length];
 }
 
 function getMode(root) {

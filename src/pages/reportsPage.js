@@ -1,6 +1,11 @@
 export function renderReportsPage() {
   const currentYear = new Date().getFullYear();
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-');
   return `
     <section class="view reports-view reports-redesign-view" id="reports" data-reports-root>
       <article class="panel reports-analytics-bar" aria-labelledby="reports-title">
@@ -83,16 +88,6 @@ export function renderReportsPage() {
           <article class="panel reports-card">
             <div class="reports-card-head">
               <div>
-                <h3>График судебных заседаний</h3>
-                <p class="muted">Временные дорожки выбранных сотрудников за день.</p>
-              </div>
-            </div>
-            <div class="reports-timeline" data-reports-timeline></div>
-          </article>
-
-          <article class="panel reports-card">
-            <div class="reports-card-head">
-              <div>
                 <h3>Ближайшие контрольные дела</h3>
                 <p class="muted">Контрольные дела из серверного ответа.</p>
               </div>
@@ -121,10 +116,6 @@ export function renderReportsPage() {
                 <p class="muted">Количество новых дел по месяцам и сравнение с прошлым годом.</p>
               </div>
               <div class="reports-quarter-total-badge" data-reports-quarter-total-badge></div>
-            </div>
-            <div class="reports-quarter-legend" aria-hidden="true">
-              <span><i></i>Текущий квартал</span>
-              <span><i></i>Аналогичный период прошлого года</span>
             </div>
             <div class="reports-quarter-months" data-reports-quarter-months></div>
             <div class="reports-quarter-month-footer" data-reports-quarter-month-footer></div>
@@ -172,13 +163,10 @@ export function renderReportsPage() {
             </div>
             <div class="reports-copy-actions">
               <button class="btn tiny" type="button" data-reports-copy="chart">Копировать диаграмму</button>
-              <button class="btn tiny" type="button" data-reports-copy="table">Копировать таблицу</button>
-              <button class="btn tiny" type="button" data-reports-copy="both">Копировать всё</button>
             </div>
           </div>
           <div class="reports-chart-layout">
             <div class="reports-chart" data-reports-structure-chart></div>
-            <div class="reports-subjects" data-reports-subject-breakdown></div>
           </div>
           <div class="reports-table-tools">
             <label>

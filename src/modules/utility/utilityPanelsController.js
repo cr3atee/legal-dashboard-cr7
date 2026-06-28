@@ -315,7 +315,8 @@ function renderNotificationsPanel() {
 
 function renderNotificationCard(item) {
   const unread = Number(item.unread) === 1;
-  const sourceLabel = item.source_type === 'general_case' ? 'Карточка дела' : 'Календарь';
+  const sourceLabel = item.source_type === 'general_case' || item.source_type === 'general_case_review_approval' ? 'Карточка дела' : 'Календарь';
+  const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
   return `
     <article class="notification-card notification-${escapeAttr(item.severity || 'info')} ${unread ? 'is-unread' : ''} ${item.status === 'overdue' ? 'is-overdue' : ''}">
       <div class="notification-card-head">
@@ -330,7 +331,9 @@ function renderNotificationCard(item) {
         <button class="btn small" type="button" data-notification-open
           data-source-type="${escapeAttr(item.source_type || '')}"
           data-source-id="${escapeAttr(item.source_id || '')}"
-          data-general-case-id="${escapeAttr(item.general_case_id || '')}">${sourceLabel}</button>
+          data-general-case-id="${escapeAttr(item.general_case_id || item.caseId || metadata.caseId || '')}"
+          data-document-id="${escapeAttr(item.documentId || item.document_id || metadata.documentId || '')}"
+          data-approval-request-id="${escapeAttr(item.approvalRequestId || item.approval_request_id || metadata.approvalRequestId || '')}">${sourceLabel}</button>
         ${unread ? `<button class="btn small primary" type="button" data-notification-read="${escapeAttr(item.key || '')}">Прочитано</button>` : ''}
       </div>
     </article>
@@ -401,14 +404,18 @@ function openNotificationSource(button) {
   const sourceType = button.dataset.sourceType || '';
   const sourceId = Number(button.dataset.sourceId || 0);
   const generalCaseId = Number(button.dataset.generalCaseId || 0);
+  const documentId = String(button.dataset.documentId || '').trim();
+  const approvalRequestId = Number(button.dataset.approvalRequestId || 0);
   closeUtilityPanels();
 
-  if (sourceType === 'general_case' || generalCaseId) {
+  if (sourceType === 'general_case' || sourceType === 'general_case_review_approval' || generalCaseId) {
     window.openView?.('cases');
     const id = generalCaseId || sourceId;
     if (id) {
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('general-cases:open-case', { detail: { id, sourceView: 'notifications' } }));
+        window.dispatchEvent(new CustomEvent('general-cases:open-case', {
+          detail: { id, documentId, approvalRequestId, tab: documentId ? 'documents' : '', sourceView: 'notifications' }
+        }));
       }, 120);
     }
     return;

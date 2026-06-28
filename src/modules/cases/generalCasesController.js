@@ -7,6 +7,7 @@ const GENERAL_CASE_COLORS_KEY = 'legal-dashboard-general-case-status-colors-v1';
 const DEFAULT_CASE_COLORS = { control: '#8b5cf6', attendance: '#ef4444', review: '#0284c7', emergency: '#f97316', registry: '#14b8a6' };
 const GENERAL_CASE_VIEW_KEY = 'legal-dashboard-general-cases-view-mode-v1';
 const GENERAL_CASE_COMMENTS_VIEWED_KEY = 'legal-dashboard-general-comments-viewed-v1';
+const GENERAL_CASE_APPEAL_INTENT_HANDLED_KEY = 'legal-dashboard-general-appeal-intent-handled-v1';
 const PROCEDURAL_POSITION_OPTIONS = [
   'Истец',
   'Ответчик',
@@ -34,6 +35,23 @@ const GENERAL_REVIEW_RESULT_OPTIONS = [
   'Мировое соглашение',
   'Заявление возвращено заявителю'
 ];
+const LEGACY_APPEAL_ACT_TYPE = 'Итоговое решение';
+const DEFAULT_APPEAL_ACT_TYPE = 'Решение суда первой инстанции';
+const FALLBACK_APPEAL_ACT_TYPES = [
+  DEFAULT_APPEAL_ACT_TYPE,
+  'Судебный акт суда апелляционной инстанции',
+  'Судебный акт суда кассационной инстанции',
+  'Судебный приказ',
+  'Заочное решение',
+  'Определение (промежуточное)'
+];
+const APPEAL_TYPE_DEFINITIONS = [
+  { code: 'appeal', label: 'Апелляционная инстанция', legacy: ['Апелляция'], title: 'апелляционной жалобы' },
+  { code: 'cassation', label: 'Кассационная инстанция', legacy: ['Кассация'], title: 'кассационной жалобы' },
+  { code: 'cassation_transfer_refusal', label: 'Жалоба на определение об отказе в передаче КЖ', legacy: [], title: 'жалобы на определение об отказе в передаче КЖ' },
+  { code: 'cassation_supreme_court', label: 'Кассационная инстанция (ВС РФ)', legacy: ['Кассация в Верховный суд РФ', 'Кассация (ВС РФ)'], title: 'кассационной жалобы в ВС РФ' }
+];
+const DEFAULT_APPEAL_TYPE_CODE = 'appeal';
 
 let state = {
   rows: [],
@@ -49,6 +67,9 @@ let state = {
   pageSize: 25,
   viewMode: loadGeneralCasesViewMode(),
   colors: loadGeneralCaseColors(),
+  appealActTypes: FALLBACK_APPEAL_ACT_TYPES.slice(),
+  appealTypes: APPEAL_TYPE_DEFINITIONS.map(item => ({ ...item, system_flag: 1 })),
+  currentDialogCaseId: 0,
   returnView: '',
   reviewApprovals: [],
   archiveWizard: {
@@ -111,6 +132,7 @@ let lastGeneralDialogOpenAt = 0;
 let lastGeneralDialogOpenKey = '';
 let currentDocumentPreview = null;
 let currentDocumentPreviewUrl = '';
+let generalMiniDialogBusy = false;
 
 export function initGeneralCasesPage() {
   if (state.initialized) return;
@@ -306,11 +328,20 @@ export function initGeneralCasesPage() {
       return;
     }
 
+    const planOpen = event.target.closest('[data-general-plan-open-case]');
+    if (planOpen) {
+      openGeneralCaseFromPlanItem(planOpen);
+      return;
+    }
+
     const appealSubmitted = event.target.closest('[data-general-appeal-submitted]');
     if (appealSubmitted) {
       const row = appealSubmitted.closest('[data-general-appeal-row]');
       if (row) {
-        row.classList.toggle('is-submitted');
+        const currentValue = row.dataset.submitted === 'true' || row.classList.contains('is-submitted');
+        const nextValue = !currentValue;
+        row.dataset.submitted = nextValue ? 'true' : 'false';
+        row.classList.toggle('is-submitted', nextValue);
         renderAppealRowResult(row);
         renderAppealSuggestions();
       }
@@ -327,8 +358,9 @@ export function initGeneralCasesPage() {
     if (restoreCard) {
       const id = Number(restoreCard.dataset.generalRestoreCard || 0);
 
-      if (id && confirm('Восстановить дело из архива?')) {
-        restoreCase(id);
+      if (id) {
+        showGeneralConfirm('Восстановить дело из архива?', { title: 'Подтверждение', okText: 'Восстановить' })
+          .then(ok => { if (ok) restoreCase(id); });
       }
 
       return;
@@ -339,8 +371,9 @@ export function initGeneralCasesPage() {
       const form = document.querySelector('[data-general-form]');
       const id = Number(form?.elements.id.value || 0);
 
-      if (id && confirm('Восстановить дело из архива?')) {
-        restoreCase(id);
+      if (id) {
+        showGeneralConfirm('Восстановить дело из архива?', { title: 'Подтверждение', okText: 'Восстановить' })
+          .then(ok => { if (ok) restoreCase(id); });
       }
     }
 
@@ -349,8 +382,9 @@ export function initGeneralCasesPage() {
       const form = document.querySelector('[data-general-form]');
       const id = Number(form?.elements.id.value || 0);
 
-      if (id && confirm('Перенести дело в архив?')) {
-        archiveCase(id);
+      if (id) {
+        showGeneralConfirm('Перенести дело в архив?', { title: 'Подтверждение', okText: 'Перенести', danger: true })
+          .then(ok => { if (ok) archiveCase(id); });
       }
     }
   });
@@ -360,7 +394,7 @@ export function initGeneralCasesPage() {
       applyRuDateMask(event.target);
     }
 
-    if (event.target.matches('[data-general-document-comment], [data-general-document-row-note]')) {
+    if (event.target.matches('[data-general-document-note]')) {
       syncDocumentsHiddenInput();
     }
 
@@ -449,6 +483,10 @@ export function initGeneralCasesPage() {
       return;
     }
 
+    if (event.target.matches('[name="review_show_flag"]')) {
+      renderDocumentsRows(collectDocumentRows());
+    }
+
     if (event.target.matches('[data-ru-date]')) {
       applyRuDateMask(event.target);
     }
@@ -468,6 +506,12 @@ export function initGeneralCasesPage() {
   });
 
   document.addEventListener('keydown', event => {
+    const planOpen = event.target.closest?.('[data-general-plan-open-case]');
+    if (planOpen && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      openGeneralCaseFromPlanItem(planOpen);
+      return;
+    }
     if (!event.target.matches?.('[data-general-claim-subject]')) return;
     if (event.key === 'Escape') {
       hideClaimSubjectAddressSuggestions();
@@ -633,6 +677,16 @@ async function fillDatalists() {
   fill('courtsList', 'court');
   fill('caseCategoriesList', 'case_category');
   fill('executorsList', 'representatives');
+  try {
+    state.appealActTypes = uniqueAppealActTypes(await dbApi.getOptions('appeal_act_type'));
+  } catch {
+    state.appealActTypes = FALLBACK_APPEAL_ACT_TYPES.slice();
+  }
+  try {
+    state.appealTypes = uniqueAppealTypes(await dbApi.getOptions('appeal_type'));
+  } catch {
+    state.appealTypes = APPEAL_TYPE_DEFINITIONS.map(item => ({ ...item, system_flag: 1 }));
+  }
   syncClaimAddressDatalist();
 }
 
@@ -646,6 +700,100 @@ async function fill(id, category) {
   } catch {
     node.innerHTML = '';
   }
+}
+
+function normalizeAppealActType(value) {
+  const text = String(value || '').trim();
+  return text === LEGACY_APPEAL_ACT_TYPE ? DEFAULT_APPEAL_ACT_TYPE : text;
+}
+
+function uniqueAppealActTypes(values = [], current = '') {
+  const seen = new Set();
+  const result = [];
+  [...FALLBACK_APPEAL_ACT_TYPES, ...(Array.isArray(values) ? values : []), current]
+    .map(normalizeAppealActType)
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .forEach(value => {
+      const key = value.replace(/\s+/g, ' ').toLocaleLowerCase('ru-RU');
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(value);
+    });
+  return result;
+}
+
+function renderAppealActTypeOptions(current) {
+  const normalized = normalizeAppealActType(current || DEFAULT_APPEAL_ACT_TYPE);
+  return uniqueAppealActTypes(state.appealActTypes, normalized)
+    .map(value => option(value, value, normalized))
+    .join('');
+}
+
+function normalizeAppealTypeText(value = '') {
+  return String(value || '').trim().replace(/\s+/g, ' ').replace(/ё/g, 'е').toLocaleLowerCase('ru-RU');
+}
+
+function getAppealTypeDefinition(code) {
+  return APPEAL_TYPE_DEFINITIONS.find(item => item.code === code) || APPEAL_TYPE_DEFINITIONS[0];
+}
+
+function inferAppealTypeCode(value = '') {
+  const text = normalizeAppealTypeText(value);
+  const byCode = APPEAL_TYPE_DEFINITIONS.find(item => normalizeAppealTypeText(item.code) === text);
+  if (byCode) return byCode.code;
+  const byLabel = APPEAL_TYPE_DEFINITIONS.find(item => normalizeAppealTypeText(item.label) === text || item.legacy.some(legacy => normalizeAppealTypeText(legacy) === text));
+  if (byLabel) return byLabel.code;
+  const dictionary = state.appealTypes.find(item => normalizeAppealTypeText(item.value || item.label) === text || normalizeAppealTypeText(item.code) === text);
+  if (dictionary?.code) return dictionary.code;
+  return DEFAULT_APPEAL_TYPE_CODE;
+}
+
+function normalizeAppealTypeCode(code = '', fallbackText = '') {
+  const normalizedCode = String(code || '').trim();
+  if (APPEAL_TYPE_DEFINITIONS.some(item => item.code === normalizedCode)) return normalizedCode;
+  if (normalizedCode.startsWith('custom_')) return normalizedCode;
+  return inferAppealTypeCode(fallbackText || normalizedCode);
+}
+
+function getAppealTypeLabel(code = DEFAULT_APPEAL_TYPE_CODE, fallback = '') {
+  const normalizedCode = normalizeAppealTypeCode(code, fallback);
+  const dictionary = state.appealTypes.find(item => item.code === normalizedCode);
+  if (!dictionary && normalizedCode.startsWith('custom_') && fallback) return fallback;
+  return dictionary?.value || dictionary?.label || getAppealTypeDefinition(normalizedCode).label || fallback || 'Обжалование';
+}
+
+function getAppealTypeTitle(code = DEFAULT_APPEAL_TYPE_CODE) {
+  return getAppealTypeDefinition(normalizeAppealTypeCode(code)).title || 'жалобы';
+}
+
+function uniqueAppealTypes(values = []) {
+  const result = [];
+  const seenCodes = new Set();
+  const push = item => {
+    const label = String(item.value || item.label || '').trim().replace(/\s+/g, ' ');
+    if (!label) return;
+    const code = item.code || inferAppealTypeCode(label) || `custom_${normalizeAppealTypeText(label).replace(/[^a-zа-я0-9]+/g, '_').replace(/^_+|_+$/g, '')}`;
+    if (seenCodes.has(code)) return;
+    seenCodes.add(code);
+    result.push({ ...item, code, value: label, label, sort_order: Number(item.sort_order ?? 999), system_flag: Number(item.system_flag || 0) });
+  };
+  APPEAL_TYPE_DEFINITIONS.forEach((item, index) => push({ ...item, value: item.label, sort_order: (index + 1) * 10, system_flag: 1 }));
+  (Array.isArray(values) ? values : []).forEach((item, index) => {
+    if (typeof item === 'string') push({ value: item, sort_order: 100 + index });
+    else push(item);
+  });
+  return result.sort((a, b) => Number(a.sort_order ?? 999) - Number(b.sort_order ?? 999) || String(a.value || '').localeCompare(String(b.value || ''), 'ru'));
+}
+
+function renderAppealTypeOptions(currentCode, currentLabel = '') {
+  const normalized = normalizeAppealTypeCode(currentCode, currentLabel);
+  const currentValue = currentLabel && !state.appealTypes.some(item => item.code === normalized)
+    ? [{ code: normalized, value: currentLabel, label: currentLabel, sort_order: 998, system_flag: 0 }]
+    : [];
+  return uniqueAppealTypes([...state.appealTypes, ...currentValue])
+    .map(item => option(item.code, item.value || item.label, normalized))
+    .join('');
 }
 
 function syncClaimAddressDatalist() {
@@ -1141,7 +1289,7 @@ function selectAllVisibleArchiveCandidates() {
 async function addSelectedGeneralCasesToArchive() {
   const selectedIds = Array.from(state.archiveWizard.selectedIds);
   if (!selectedIds.length) {
-    alert('Выберите хотя бы одно дело');
+    await showGeneralAlert('Выберите хотя бы одно дело', { title: 'Архив' });
     return;
   }
 
@@ -1159,7 +1307,7 @@ async function addSelectedGeneralCasesToArchive() {
     });
 
     if (blocked.length) {
-      alert(blocked.join('\n'));
+      await showGeneralAlert(blocked.join('\n'), { title: 'Архив' });
     }
 
     if (!readyRows.length) return;
@@ -1172,7 +1320,7 @@ async function addSelectedGeneralCasesToArchive() {
     closeGeneralArchiveWizard();
     await loadGeneralCases();
   } catch (error) {
-    alert('Не удалось добавить выбранные дела в архив:\n' + error.message);
+    await showGeneralAlert('Не удалось добавить выбранные дела в архив:\n' + error.message, { title: 'Архив' });
   }
 }
 
@@ -1413,8 +1561,10 @@ function renderCasesTableRow(row) {
       <td class="actions-cell">
         ${state.archived ? `<button class="btn small restore" data-general-restore-card="${row.id}" type="button">Восстановить</button>` : ''}
         ${renderRelatedOpenButton(row, 'table')}
-        ${renderPrintPreviewButton(row, 'table')}
-        <button class="general-case-edit-icon table-edit" data-general-open="${row.id}" onclick="if (window.__generalCasesOpenExisting) window.__generalCasesOpenExisting(this.dataset.generalOpen, this); return false;" type="button" aria-label="Редактировать" title="Редактировать">${pencilIcon()}</button>
+        <div class="general-table-action-stack">
+          ${renderPrintPreviewButton(row, 'table')}
+          <button class="general-case-edit-icon table-edit" data-general-open="${row.id}" onclick="if (window.__generalCasesOpenExisting) window.__generalCasesOpenExisting(this.dataset.generalOpen, this); return false;" type="button" aria-label="Редактировать карточку дела" title="Редактировать карточку дела">${pencilIcon()}</button>
+        </div>
       </td>
     </tr>
   `;
@@ -1803,7 +1953,7 @@ function __old_setAppealBlockVisible(visible) {
   if (block) block.hidden = !visible;
 }
 
-function __old_handleMotivatedDecisionDateChange_1(input) {
+async function __old_handleMotivatedDecisionDateChange_1(input) {
   const value = String(input?.value || '').trim();
   if (!value || !isValidRuDate(value)) {
     renderAppealSuggestions();
@@ -1814,7 +1964,7 @@ function __old_handleMotivatedDecisionDateChange_1(input) {
   const alreadyVisible = block && !block.hidden;
 
   if (!alreadyVisible) {
-    const yes = confirm('Судебный акт подлежит обжалованию?');
+    const yes = await showGeneralConfirm('Судебный акт подлежит обжалованию?', { title: 'Обжалование', okText: 'Да' });
     if (!yes) {
       setAppealBlockVisible(false);
       const container = document.querySelector('[data-general-appeal-rows]');
@@ -1848,13 +1998,14 @@ function syncAppealWizardVisibility() {
   const actType = String(form.elements.first_instance_act_type?.value || '').trim();
   const processKind = String(form.elements.process_kind?.value || 'ГПК');
   const appealKind = String(form.elements.appeal_kind?.value || 'Апелляция');
+  const appealTypeCode = normalizeAppealTypeCode(appealKind, appealKind);
 
   const orderField = document.querySelector('[data-general-order-copy-field]');
   const apkCassationField = document.querySelector('[data-general-apk-cassation-field]');
   const supervisionField = document.querySelector('[data-general-supervision-field]');
 
   if (orderField) orderField.hidden = actType !== 'Судебный приказ';
-  if (apkCassationField) apkCassationField.hidden = !(processKind === 'АПК' && appealKind === 'Кассация');
+  if (apkCassationField) apkCassationField.hidden = !(processKind === 'АПК' && appealTypeCode === 'cassation');
   if (supervisionField) supervisionField.hidden = appealKind !== 'Надзор';
 }
 
@@ -1890,7 +2041,7 @@ function renderAppealResult(forcePrompt = false) {
   const key = `${result.dateRu}|${data.appeal_kind}|${data.process_kind}|${data.first_instance_act_type}`;
   if (forcePrompt && node.dataset.lastPrompt !== key) {
     node.dataset.lastPrompt = key;
-    alert(`Последний срок подачи жалобы — ${result.dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`);
+    showGeneralAlert(`Последний срок подачи жалобы — ${result.dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`, { title: 'Калькулятор сроков' });
   }
 }
 
@@ -1919,17 +2070,37 @@ function maybeShowAppealDeadlineQuestion(rowNode, force = false) {
   }
 
   rowNode.dataset.deadlinePrompted = key;
-  alert(`Последний срок подачи жалобы — ${deadline.dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`);
+  showGeneralAlert(`Последний срок подачи жалобы — ${deadline.dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`, { title: 'Калькулятор сроков' });
   renderAppealSuggestions();
 }
 
 function parseAppeals(value) {
   try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = typeof value === 'string' ? JSON.parse(value || '[]') : value;
+    return Array.isArray(parsed) ? parsed.map(normalizeAppealRowData) : [];
   } catch {
     return [];
   }
+}
+
+function makeAppealRowId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `appeal-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeAppealRowData(row = {}) {
+  const label = row.appeal_label || row.appeal_kind || row.appealKind || row.title || '';
+  const code = normalizeAppealTypeCode(row.appeal_type_code || row.appealTypeCode || row.kind_code || row.code, label);
+  const display = row.appeal_label || getAppealTypeLabel(code, label);
+  return {
+    ...row,
+    appeal_row_id: row.appeal_row_id || row.appealRowId || row.counter_id || makeAppealRowId(),
+    appeal_type_code: code,
+    appeal_kind: display,
+    appeal_label: display,
+    title: display,
+    event_date: row.event_date || row.date || ''
+  };
 }
 
 function __old_collectAppealRows() {
@@ -2065,7 +2236,7 @@ function __old_confirmAppealDeadlinesBeforeSave(data) {
     .filter(Boolean);
 
   if (lines.length) {
-    alert(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`);
+    showGeneralAlert(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`, { title: 'Калькулятор сроков' });
   }
 }
 
@@ -2089,7 +2260,7 @@ async function __old_syncGeneralCaseAutoTasks(savedCase, data, previousRow = nul
   if (hearingDateChanged && existingAutoTasks.length) {
     const oldText = oldEvents.map(displayIsoAsRu).join(', ');
     const newText = newEvents.map(displayIsoAsRu).join(', ');
-    const ok = confirm(`⚠️ Дата предварительного заседания изменена с ${oldText} на ${newText}.\nОбнаружены зависимые задачи.\n\nПересчитать сроки их исполнения автоматически?`);
+    const ok = await showGeneralConfirm(`Дата предварительного заседания изменена с ${oldText} на ${newText}.\nОбнаружены зависимые задачи.\n\nПересчитать сроки их исполнения автоматически?`, { title: 'Пересчёт сроков', okText: 'Пересчитать' });
     if (!ok) return;
   }
 
@@ -2347,10 +2518,20 @@ function getHearingEventDates(source = {}) {
 }
 
 function ruDateToDate(value) {
-  const match = String(value || '').trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!match) return null;
-  const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
-  if (Number.isNaN(date.getTime())) return null;
+  const text = String(value || '').trim();
+  const ruMatch = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const year = ruMatch ? Number(ruMatch[3]) : isoMatch ? Number(isoMatch[1]) : 0;
+  const month = ruMatch ? Number(ruMatch[2]) : isoMatch ? Number(isoMatch[2]) : 0;
+  const day = ruMatch ? Number(ruMatch[1]) : isoMatch ? Number(isoMatch[3]) : 0;
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) return null;
   return date;
 }
 
@@ -2444,6 +2625,7 @@ function openDialogCore(row = null) {
 
   form.reset();
   form.elements.id.value = row?.id || '';
+  resetAppealCalculatorStateForDialog(row?.id || 0);
 
   const title = document.querySelector('[data-general-dialog-title]');
   if (title) {
@@ -2539,13 +2721,14 @@ function openDialogDomFallback(row = null, cause = null) {
   const form = document.querySelector('[data-general-form]');
 
   if (!dialog || !form) {
-    alert('Не найдено модальное окно общего перечня дел. Обновите страницу и повторите попытку.');
+    showGeneralAlert('Не найдено модальное окно общего перечня дел. Обновите страницу и повторите попытку.', { title: 'Карточка дела' });
     return;
   }
 
   try { form.reset(); } catch {}
 
   setGeneralFormValue(form, 'id', row?.id || '');
+  resetAppealCalculatorStateForDialog(row?.id || 0);
 
   const title = document.querySelector('[data-general-dialog-title]');
   if (title) title.textContent = row ? (state.archived ? 'Архивное дело' : 'Карточка дела') : 'Новое дело';
@@ -2833,7 +3016,6 @@ function returnToSourceView() {
 
 async function saveCase(form) {
   const data = collectGeneralCaseFormData(form);
-  confirmAppealDeadlinesBeforeSave(data);
   const previousRow = data.id
     ? state.rows.find(row => Number(row.id) === Number(data.id))
     : null;
@@ -2900,7 +3082,14 @@ async function saveCase(form) {
       data.attendance_hearing_missing = 1;
     }
 
-    const savedCase = await persistGeneralCase(data);
+    syncAppealRowsWithCurrentActDate(data, previousRow);
+
+    let savedCase = await persistGeneralCase(data);
+    const appealIntent = await maybeCreateAppealRowAfterSave(savedCase, data, previousRow);
+    const openAppealAfterSave = Boolean(appealIntent?.openAppeal);
+    if (openAppealAfterSave) {
+      savedCase = await dbApi.updateGeneralCase(savedCase.id, { ...data, id: savedCase.id });
+    }
 
     if (wantsAttendance && attendanceData) {
       await dbApi.addGeneralCaseAttendance(savedCase.id, {
@@ -2924,10 +3113,105 @@ async function saveCase(form) {
 
     await syncGeneralCaseAutoTasks(savedCase, data, previousRow);
 
-    await finishGeneralSave(data, attendanceData);
+    await finishGeneralSave(data, attendanceData, {
+      reopenCaseId: openAppealAfterSave ? savedCase.id : 0,
+      focusAppeal: openAppealAfterSave,
+      keepDialogOpen: Boolean(appealIntent?.asked)
+    });
   } catch (error) {
-    alert('Не удалось сохранить дело:\n' + error.message);
+    await showGeneralAlert('Не удалось сохранить дело:\n' + error.message, { title: 'Сохранение дела' });
   }
+}
+
+async function maybeCreateAppealRowAfterSave(savedCase = {}, data = {}, previousRow = null) {
+  const caseId = Number(savedCase.id || data.id || 0);
+  const rows = parseAppeals(data.appeals_json);
+  const date = String(data.judicial_act_date_first || data.motivated_decision_date || '').trim();
+  if (!caseId || rows.length || !isValidRuDate(date)) return { openAppeal: false, asked: false };
+  if (!shouldAskAppealIntent(caseId, data, previousRow)) return { openAppeal: false, asked: false };
+
+  const answer = await askAppealIntentAfterSave();
+  markAppealIntentHandled(caseId, data);
+  if (answer !== 'yes') return { openAppeal: false, asked: true };
+
+  const nextRows = [{
+    appeal_row_id: makeAppealRowId(),
+    appeal_type_code: normalizeAppealTypeCode(data.appeal_kind || DEFAULT_APPEAL_TYPE_CODE, data.appeal_kind || ''),
+    process_kind: data.process_kind || 'ГПК',
+    act_instance: data.act_instance || 'Первая инстанция',
+    appeal_kind: getAppealTypeLabel(normalizeAppealTypeCode(data.appeal_kind || DEFAULT_APPEAL_TYPE_CODE, data.appeal_kind || ''), data.appeal_kind || ''),
+    act_type: normalizeAppealActType(data.first_instance_act_type || DEFAULT_APPEAL_ACT_TYPE),
+    event_date: date,
+    date,
+    title: data.appeal_kind || 'Апелляция',
+    late_motivated_received: data.late_motivated_received || 'Нет',
+    submitted: false,
+    note: ''
+  }];
+  data.appeals_json = JSON.stringify(nextRows);
+  return { openAppeal: true, asked: true };
+}
+
+function appealIntentSignature(data = {}) {
+  return [
+    data.judicial_act_date_first || '',
+    data.motivated_decision_date || '',
+    data.first_instance_act_type || '',
+    data.process_kind || '',
+    data.act_instance || '',
+    data.proceeding_form || '',
+    data.appeal_kind || ''
+  ].map(value => String(value || '').trim()).join('|');
+}
+
+function readAppealIntentHandledMap() {
+  try {
+    return JSON.parse(localStorage.getItem(GENERAL_CASE_APPEAL_INTENT_HANDLED_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function markAppealIntentHandled(caseId, data = {}) {
+  const map = readAppealIntentHandledMap();
+  map[String(caseId)] = appealIntentSignature(data);
+  localStorage.setItem(GENERAL_CASE_APPEAL_INTENT_HANDLED_KEY, JSON.stringify(map));
+}
+
+function shouldAskAppealIntent(caseId, data = {}, previousRow = null) {
+  const signature = appealIntentSignature(data);
+  if (!signature.replaceAll('|', '').trim()) return false;
+  if (readAppealIntentHandledMap()[String(caseId)] === signature) return false;
+  if (!previousRow) return true;
+  return appealIntentSignature(previousRow) !== signature;
+}
+
+function askAppealIntentAfterSave() {
+  return new Promise(resolve => {
+    openAppealIntentDialog({
+      onYes: () => resolve('yes'),
+      onNo: () => resolve('no')
+    });
+  });
+}
+
+function syncAppealRowsWithCurrentActDate(data = {}, previousRow = null) {
+  const currentDate = String(data.judicial_act_date_first || data.motivated_decision_date || '').trim();
+  if (!isValidRuDate(currentDate)) return;
+  const rows = parseAppeals(data.appeals_json);
+  if (!rows.length) return;
+  const previousDate = String(previousRow?.judicial_act_date_first || previousRow?.motivated_decision_date || '').trim();
+  const [first, ...rest] = rows;
+  if (normalizeAppealTypeCode(first.appeal_type_code, first.appeal_kind || first.title) === 'cassation_transfer_refusal') return;
+  const firstDate = String(first.event_date || first.date || '').trim();
+  if (firstDate && previousDate && firstDate !== previousDate) return;
+  const updatedFirst = {
+    ...first,
+    event_date: currentDate,
+    date: currentDate,
+    title: first.title || first.appeal_kind || 'Апелляция'
+  };
+  data.appeals_json = JSON.stringify([updatedFirst, ...rest]);
 }
 
 function collectGeneralCaseFormData(form) {
@@ -3068,9 +3352,9 @@ async function askControlQuestionAgain(savedCase, data, attendanceData) {
   await finishGeneralSave(data, attendanceData);
 }
 
-async function finishGeneralSave(data, attendanceData = null) {
+async function finishGeneralSave(data, attendanceData = null, options = {}) {
   closeAllGeneralWorkflowDialogs();
-  closeDialog();
+  if (!options.keepDialogOpen) closeDialog();
   await loadGeneralCases();
 
   window.dispatchEvent(new CustomEvent('controlled-cases:reload'));
@@ -3085,6 +3369,35 @@ async function finishGeneralSave(data, attendanceData = null) {
   } else if (attendanceData) {
     showNotification('Дело сохранено в общий перечень, календарь и график');
   }
+
+  if (options.keepDialogOpen) {
+    if (options.focusAppeal) {
+      renderAppealRows(parseAppeals(data.appeals_json));
+      setAppealBlockVisible(true);
+      setTimeout(focusAppealCalculatorAfterSave, 0);
+    }
+    return;
+  }
+
+  if (options.reopenCaseId) {
+    const row = state.rows.find(item => Number(item.id) === Number(options.reopenCaseId));
+    if (row) {
+      openDialog(row);
+      if (options.focusAppeal) {
+        setTimeout(focusAppealCalculatorAfterSave, 0);
+      }
+    }
+  }
+}
+
+function focusAppealCalculatorAfterSave() {
+  switchGeneralCaseTab('appeal');
+  const dialog = getCurrentGeneralDialog();
+  const row = dialog?.querySelector('[data-general-appeal-row]');
+  if (row) renderAppealRowResult(row);
+  const target = row?.querySelector('[data-general-appeal-date]') || dialog?.querySelector('[data-general-case-tab-panel="appeal"]');
+  target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  try { target?.focus?.({ preventScroll: true }); } catch {}
 }
 
 
@@ -3174,7 +3487,121 @@ function ensureGeneralWorkflowDialogs() {
         <button class="btn" data-general-date-cancel type="button">Отмена</button>
       </div>
     </dialog>
+
+    <dialog class="general-mini-dialog general-message-dialog" data-general-message-dialog>
+      <div class="general-mini-head">
+        <h3 data-general-message-title>Сообщение</h3>
+      </div>
+      <div class="general-mini-body">
+        <p data-general-message-text></p>
+        <label data-general-message-input-wrap hidden>
+          <span data-general-message-input-label>Комментарий</span>
+          <textarea data-general-message-input rows="4"></textarea>
+        </label>
+      </div>
+      <div class="general-mini-actions">
+        <button class="btn" data-general-message-cancel type="button">Отмена</button>
+        <button class="btn primary" data-general-message-ok type="button">ОК</button>
+      </div>
+    </dialog>
   `);
+}
+
+function showGeneralMiniDialog({
+  title = 'Сообщение',
+  message = '',
+  mode = 'alert',
+  okText = 'ОК',
+  cancelText = 'Отмена',
+  danger = false,
+  inputLabel = 'Комментарий',
+  inputValue = ''
+} = {}) {
+  ensureGeneralWorkflowDialogs();
+  const dialog = document.querySelector('[data-general-message-dialog]');
+  const titleNode = dialog?.querySelector('[data-general-message-title]');
+  const textNode = dialog?.querySelector('[data-general-message-text]');
+  const inputWrap = dialog?.querySelector('[data-general-message-input-wrap]');
+  const input = dialog?.querySelector('[data-general-message-input]');
+  const inputLabelNode = dialog?.querySelector('[data-general-message-input-label]');
+  const ok = dialog?.querySelector('[data-general-message-ok]');
+  const cancel = dialog?.querySelector('[data-general-message-cancel]');
+  const activeBeforeOpen = document.activeElement;
+
+  if (!dialog || !ok || !cancel) {
+    showNotification?.(message || title, mode === 'alert' ? 'info' : 'error');
+    if (mode === 'confirm') return Promise.resolve(false);
+    if (mode === 'prompt') return Promise.resolve(null);
+    return Promise.resolve(false);
+  }
+
+  if (generalMiniDialogBusy && dialog.open) dialog.close('replace');
+  generalMiniDialogBusy = true;
+
+  if (titleNode) titleNode.textContent = title;
+  if (textNode) textNode.textContent = message;
+  if (inputWrap) inputWrap.hidden = mode !== 'prompt';
+  if (inputLabelNode) inputLabelNode.textContent = inputLabel;
+  if (input) input.value = inputValue;
+  ok.textContent = okText;
+  cancel.textContent = cancelText;
+  cancel.hidden = mode === 'alert';
+  ok.classList.toggle('danger', Boolean(danger));
+
+  return new Promise(resolve => {
+    let settled = false;
+    const cleanup = result => {
+      if (settled) return;
+      settled = true;
+      ok.onclick = null;
+      cancel.onclick = null;
+      dialog.oncancel = null;
+      dialog.onclose = null;
+      generalMiniDialogBusy = false;
+      if (activeBeforeOpen && typeof activeBeforeOpen.focus === 'function') {
+        try { activeBeforeOpen.focus({ preventScroll: true }); } catch { activeBeforeOpen.focus(); }
+      }
+      resolve(result);
+    };
+
+    ok.onclick = () => {
+      const result = mode === 'prompt' ? (input?.value || '') : true;
+      dialog.onclose = null;
+      dialog.close('ok');
+      cleanup(result);
+    };
+    cancel.onclick = () => {
+      dialog.onclose = null;
+      dialog.close('cancel');
+      cleanup(mode === 'confirm' ? false : null);
+    };
+    dialog.oncancel = event => {
+      event.preventDefault();
+      dialog.onclose = null;
+      dialog.close('cancel');
+      cleanup(mode === 'confirm' ? false : null);
+    };
+    dialog.onclose = () => {
+      if (generalMiniDialogBusy) cleanup(mode === 'confirm' ? false : null);
+    };
+
+    if (!dialog.open) dialog.showModal();
+    if (mode === 'prompt') input?.focus();
+    else if (mode === 'confirm') cancel.focus();
+    else ok.focus();
+  });
+}
+
+function showGeneralAlert(message, options = {}) {
+  return showGeneralMiniDialog({ ...options, message, mode: 'alert' });
+}
+
+function showGeneralConfirm(message, options = {}) {
+  return showGeneralMiniDialog({ ...options, message, mode: 'confirm' });
+}
+
+function showGeneralPrompt(message, defaultValue = '', options = {}) {
+  return showGeneralMiniDialog({ ...options, message, inputValue: defaultValue, mode: 'prompt' });
 }
 
 function askFlagQuestion(title, question) {
@@ -3304,18 +3731,18 @@ function askAttendanceDateTime() {
   };
 
   return new Promise(resolve => {
-    saveButton.onclick = () => {
+    saveButton.onclick = async () => {
       const hearing_date = String(dateInput.value || '').trim();
       const hearing_time = String(timeInput.value || '').trim();
       const cleanTime = hearing_time.replace(':', '');
 
       if (!isValidRuDate(hearing_date)) {
-        alert('Укажите дату заседания в формате ДД.ММ.ГГГГ.');
+        await showGeneralAlert('Укажите дату заседания в формате ДД.ММ.ГГГГ.', { title: 'Дата заседания' });
         return;
       }
 
       if (cleanTime.length !== 4 || !/^\d+$/.test(cleanTime)) {
-        alert('Время должно быть в формате ЧЧ:ММ.');
+        await showGeneralAlert('Время должно быть в формате ЧЧ:ММ.', { title: 'Дата заседания' });
         return;
       }
 
@@ -3383,16 +3810,11 @@ function closeAllGeneralWorkflowDialogs() {
 }
 
 function isValidRuDate(value) {
-  const parsed = parseRuDate(value);
-  if (!parsed) return false;
-  const [day, month, year] = String(value || '').split('.').map(Number);
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+  return Boolean(ruDateToDate(value));
 }
 
 function parseRuDate(value) {
-  const [day, month, year] = String(value || '').split('.').map(Number);
-  if (!day || !month || !year) return null;
-  return new Date(year, month - 1, day);
+  return ruDateToDate(value);
 }
 
 function formatMiniTime(value) {
@@ -3423,7 +3845,7 @@ async function archiveCase(id) {
     showNotification('Дело перенесено в архив');
     loadGeneralCases();
   } catch (error) {
-    alert('Не удалось перенести в архив:\\n' + error.message);
+    await showGeneralAlert('Не удалось перенести в архив:\n' + error.message, { title: 'Архив' });
   }
 }
 
@@ -3436,10 +3858,10 @@ async function restoreCase(id) {
 
     window.dispatchEvent(new CustomEvent('controlled-cases:reload'));
     window.dispatchEvent(new CustomEvent('schedule:reload'));
-    window.dispatchEvent(new CustomEvent('calendar:reload'));
+  window.dispatchEvent(new CustomEvent('calendar:reload'));
   window.dispatchEvent(new CustomEvent('emergency:reload'));
   } catch (error) {
-    alert('Не удалось восстановить дело:\\n' + error.message);
+    await showGeneralAlert('Не удалось восстановить дело:\n' + error.message, { title: 'Архив' });
   }
 }
 
@@ -3475,7 +3897,7 @@ function escapeHtml(value) {
 /* ===== HOTFIX/UPDATE: event-based appeal calculator for general cases ===== */
 function handleJudicialActDateChange(input) {
   const value = String(input?.value || '').trim();
-  const form = document.querySelector('[data-general-form]');
+  const form = input?.closest('[data-general-dialog]')?.querySelector('[data-general-form]') || getCurrentGeneralForm();
   const motivated = form?.elements.motivated_decision_date;
   if (value && isValidRuDate(value) && motivated && !motivated.value.trim()) {
     motivated.value = value;
@@ -3490,7 +3912,8 @@ function handleMotivatedDecisionDateChange(input) {
     return;
   }
 
-  const block = document.querySelector('[data-general-appeal-block]');
+  const dialog = input?.closest('[data-general-dialog]') || getCurrentGeneralDialog();
+  const block = dialog?.querySelector('[data-general-appeal-block]');
   const alreadyVisible = block && !block.hidden;
   const rows = collectAppealRows();
 
@@ -3502,26 +3925,14 @@ function handleMotivatedDecisionDateChange(input) {
     return;
   }
 
-  openAppealIntentDialog({
-    onYes: () => {
-      setAppealBlockVisible(true);
-      renderAppealRows([{ event_date: value }]);
-      renderAppealSuggestions(true);
-    },
-    onNo: () => {
-      setAppealBlockVisible(false);
-      const container = document.querySelector('[data-general-appeal-rows]');
-      if (container) container.innerHTML = '';
-      renderAppealSuggestions();
-    }
-  });
+  renderAppealSuggestions();
 }
 
 function openAppealIntentDialog({ onYes, onNo } = {}) {
   document.querySelector('[data-general-appeal-intent-modal]')?.remove();
 
   const overlay = document.createElement('div');
-  overlay.className = 'general-mini-modal-overlay';
+  overlay.className = 'general-mini-modal-overlay general-appeal-intent-overlay';
   overlay.dataset.generalAppealIntentModal = '1';
   overlay.innerHTML = `
     <div class="general-mini-modal" role="dialog" aria-modal="true">
@@ -3535,7 +3946,12 @@ function openAppealIntentDialog({ onYes, onNo } = {}) {
     </div>
   `;
 
-  document.body.appendChild(overlay);
+  const dialog = getCurrentGeneralDialog();
+  if (dialog) {
+    dialog.appendChild(overlay);
+  } else {
+    document.body.appendChild(overlay);
+  }
 
   const close = callback => {
     overlay.remove();
@@ -3550,7 +3966,10 @@ function openAppealIntentDialog({ onYes, onNo } = {}) {
 }
 
 function fillEmptyAppealDates(value) {
-  document.querySelectorAll('[data-general-appeal-date]').forEach(input => {
+  getCurrentAppealRowsContainer()?.querySelectorAll('[data-general-appeal-date]').forEach(input => {
+    const row = input.closest('[data-general-appeal-row]');
+    const typeCode = normalizeAppealTypeCode(row?.querySelector('[data-general-appeal-kind]')?.value || row?.dataset.appealTypeCode || '', row?.querySelector('[data-general-appeal-kind]')?.selectedOptions?.[0]?.textContent || '');
+    if (typeCode === 'cassation_transfer_refusal') return;
     if (!input.value.trim()) input.value = value;
   });
 }
@@ -3659,7 +4078,7 @@ function __old_addAppealRow_1(row = {}) {
   }));
 
   renderAppealRowResult(container.lastElementChild);
-  renderAppealSuggestions(true);
+  renderAppealSuggestions();
 }
 
 function __old_removeAppealRow_1(button) {
@@ -3765,7 +4184,7 @@ function __old_renderAppealSuggestions_1(forcePrompt = false) {
     `;
 
     if (forcePrompt && tasks[0]) {
-      alert(`Последний срок подачи жалобы — ${tasks[0].dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`);
+      showGeneralAlert(`Последний срок подачи жалобы — ${tasks[0].dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`, { title: 'Калькулятор сроков' });
     }
   } catch (error) {
     console.warn('Ошибка расчета подсказок обжалования', error);
@@ -3804,7 +4223,7 @@ function __old_confirmAppealDeadlinesBeforeSave_1(data) {
     .filter(Boolean);
 
   if (lines.length) {
-    alert(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`);
+    showGeneralAlert(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`, { title: 'Калькулятор сроков' });
   }
 }
 
@@ -3828,7 +4247,7 @@ async function __old_syncGeneralCaseAutoTasks_1(savedCase, data, previousRow = n
   if (hearingDateChanged && existingAutoTasks.length) {
     const oldText = oldEvents.map(displayIsoAsRu).join(', ');
     const newText = newEvents.map(displayIsoAsRu).join(', ');
-    const ok = confirm(`⚠️ Дата предварительного заседания изменена с ${oldText} на ${newText}.\nОбнаружены зависимые задачи.\n\nПересчитать сроки их исполнения автоматически?`);
+    const ok = await showGeneralConfirm(`Дата предварительного заседания изменена с ${oldText} на ${newText}.\nОбнаружены зависимые задачи.\n\nПересчитать сроки их исполнения автоматически?`, { title: 'Пересчёт сроков', okText: 'Пересчитать' });
     if (!ok) return;
   }
 
@@ -3946,6 +4365,11 @@ function __old_calculateAppealDeadlineFromAppealEvent(item = {}) {
 
 function normalizeAppealKind(value = '') {
   const text = String(value || '').trim();
+  const code = inferAppealTypeCode(text);
+  if (code === 'appeal') return 'Апелляция';
+  if (code === 'cassation') return 'Кассация';
+  if (code === 'cassation_transfer_refusal') return 'Жалоба на определение об отказе в передаче КЖ';
+  if (code === 'cassation_supreme_court') return 'Кассация в Верховный суд РФ';
   if (/конституц/i.test(text)) return 'Жалоба в Конституционный суд РФ';
   if (/верхов/i.test(text) || /вс\s*рф/i.test(text)) return 'Кассация в Верховный суд РФ';
   if (/кассац/i.test(text)) return 'Кассация';
@@ -3953,9 +4377,11 @@ function normalizeAppealKind(value = '') {
 }
 
 function appealDateLabel(appealKind = 'Апелляция') {
+  const code = normalizeAppealTypeCode(appealKind, appealKind);
   const kind = normalizeAppealKind(appealKind);
-  if (kind === 'Кассация') return 'Дата изготовления апелляционного определения';
-  if (kind === 'Кассация в Верховный суд РФ') return 'Дата изготовления определения кассационного суда / арбитражного суда округа';
+  if (code === 'cassation') return 'Дата изготовления апелляционного определения';
+  if (code === 'cassation_transfer_refusal') return 'Дата изготовления определения об отказе в передаче КЖ в окончательной форме';
+  if (code === 'cassation_supreme_court') return 'Дата изготовления определения кассационного суда / арбитражного суда округа';
   if (kind === 'Жалоба в Конституционный суд РФ') return 'Дата последнего судебного акта';
   return 'Дата изготовления мотивированного решения суда первой инстанции';
 }
@@ -3999,25 +4425,43 @@ function __old_switchGeneralCaseTab(tab = 'info') {
   document.querySelectorAll('[data-general-case-tab]').forEach(button => button.classList.toggle('is-active', button.dataset.generalCaseTab === safeTab));
   document.querySelectorAll('[data-general-case-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.generalCaseTabPanel !== safeTab; panel.classList.toggle('is-active', panel.dataset.generalCaseTabPanel === safeTab); });
 }
-function parseDocuments(value) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
+function makeDocumentId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+function normalizeDocumentRecord(doc = {}) {
+  return {
+    ...doc,
+    id: doc.id || doc.document_id || makeDocumentId()
+  };
+}
+function parseDocuments(value) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.map(normalizeDocumentRecord) : []; } catch { return []; } }
 function collectDocumentRows() {
-  return Array.from(document.querySelectorAll('[data-general-document-row]')).map(row => ({
+  const sharedNote = document.querySelector('[data-general-document-note]')?.value?.trim() || '';
+  return Array.from(document.querySelectorAll('[data-general-document-row]')).map(row => normalizeDocumentRecord({
+    id: row.dataset.documentId || row.dataset.id || '',
     name: row.dataset.name || '',
     path: row.dataset.path || '',
     type: row.dataset.type || 'Иной документ',
     mime: row.dataset.mime || '',
-    note: row.querySelector('[data-general-document-row-note]')?.value?.trim() || '',
-    comment: row.querySelector('[data-general-document-comment]')?.value?.trim() || '',
+    note: sharedNote || row.dataset.note || '',
     added_at: row.dataset.addedAt || new Date().toISOString()
-  })).filter(item => item.name || item.path || item.note || item.comment);
+  })).filter(item => item.name || item.path || item.note);
 }
 function syncDocumentsHiddenInput() { const form = document.querySelector('[data-general-form]'); if (form?.elements.documents_json) form.elements.documents_json.value = JSON.stringify(collectDocumentRows()); }
+function syncDocumentNoteFieldFromDocs(docs = []) {
+  const noteField = document.querySelector('[data-general-document-note]');
+  if (!noteField) return;
+  const savedNote = [...docs].reverse().find(doc => String(doc.note || '').trim())?.note || '';
+  noteField.value = savedNote;
+}
 function renderDocumentsRows(rows = []) {
   const list = document.querySelector('[data-general-documents-list]');
   if (!list) return;
-  const docs = Array.isArray(rows) ? rows : [];
+  const docs = (Array.isArray(rows) ? rows : []).map(normalizeDocumentRecord);
+  syncDocumentNoteFieldFromDocs(docs);
   if (!docs.length) { list.innerHTML = '<div class="empty-card">Документы пока не прикреплены</div>'; syncDocumentsHiddenInput(); return; }
-  list.innerHTML = docs.map((doc, index) => `<div class="general-document-row" data-general-document-row data-name="${escapeAttr(doc.name || '')}" data-path="${escapeAttr(doc.path || '')}" data-type="${escapeAttr(doc.type || 'Иной документ')}" data-mime="${escapeAttr(doc.mime || '')}" data-added-at="${escapeAttr(doc.added_at || new Date().toISOString())}"><div class="general-document-main"><div class="general-document-icon">${documentIcon(doc)}</div><div><span class="general-document-type-badge">${escapeHtml(doc.type || 'Иной документ')}</span><b>${escapeHtml(doc.name || doc.path || 'Документ')}</b><small>${escapeHtml(doc.path || 'локальный путь недоступен')}</small></div></div><label><span>Примечание к документу</span><input data-general-document-row-note value="${escapeAttr(doc.note || '')}" placeholder="копия жалобы / доказательство отправки / судебный акт"></label><label><span>Комментарии</span><textarea data-general-document-comment rows="2">${escapeHtml(doc.comment || '')}</textarea></label><div class="general-document-row-actions"><button class="btn small primary" data-general-document-open-item="${index}" type="button">👁 Предпросмотр</button><button class="btn small" data-general-document-external-item="${index}" type="button">↗ Открыть</button><button class="btn small danger" data-general-document-remove type="button">−</button></div></div>`).join('');
+  list.innerHTML = docs.map((doc, index) => `<div class="general-document-row" data-general-document-row data-document-id="${escapeAttr(doc.id || '')}" data-name="${escapeAttr(doc.name || '')}" data-path="${escapeAttr(doc.path || '')}" data-type="${escapeAttr(doc.type || 'Иной документ')}" data-mime="${escapeAttr(doc.mime || '')}" data-note="${escapeAttr(doc.note || '')}" data-added-at="${escapeAttr(doc.added_at || new Date().toISOString())}"><div class="general-document-main"><div class="general-document-icon">${documentIcon(doc)}</div><div><span class="general-document-type-badge">${escapeHtml(doc.type || 'Иной документ')}</span><b>${escapeHtml(doc.name || doc.path || 'Документ')}</b><small>${escapeHtml(doc.path || 'локальный путь недоступен')}</small></div></div><div class="general-document-row-actions"><button class="btn small primary" data-general-document-open-item="${index}" type="button">👁 Предпросмотр</button><button class="btn small" data-general-document-external-item="${index}" type="button">↗ Открыть</button><button class="btn small danger" data-general-document-remove type="button">−</button></div></div>`).join('');
   syncDocumentsHiddenInput();
 }
 function documentIcon(doc = {}) {
@@ -4047,12 +4491,12 @@ async function handleDocumentFileInput(input) {
         data_base64: dataBase64
       });
       docs.push({
+        id: makeDocumentId(),
         name: uploaded.name || file.name || 'Документ',
         path: uploaded.path || '',
         type,
         mime: uploaded.mime || file.type || '',
         note,
-        comment: '',
         added_at: now
       });
     } catch (error) {
@@ -4063,8 +4507,8 @@ async function handleDocumentFileInput(input) {
   input.value = '';
   renderDocumentsRows(docs);
   const noteField = document.querySelector('[data-general-document-note]');
-  if (noteField) noteField.value = '';
-  if (rejected.length) alert(`Не удалось добавить некоторые файлы:\n${rejected.join('\n')}\n\nРазрешены PDF, DOC и DOCX размером до 100 МБ.`);
+  if (noteField) noteField.value = note;
+  if (rejected.length) await showGeneralAlert(`Не удалось добавить некоторые файлы:\n${rejected.join('\n')}\n\nРазрешены PDF, DOC и DOCX размером до 100 МБ.`, { title: 'Документы' });
 }
 
 function fileToBase64(file) {
@@ -4078,13 +4522,18 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
-function removeDocumentRow(button) { button.closest('[data-general-document-row]')?.remove(); renderDocumentsRows(collectDocumentRows()); }
-function openDocumentsPicker() {
+async function removeDocumentRow(button) {
+  const ok = await showGeneralConfirm('Удалить документ?', { title: 'Подтверждение', okText: 'Удалить', danger: true });
+  if (!ok) return;
+  button.closest('[data-general-document-row]')?.remove();
+  renderDocumentsRows(collectDocumentRows());
+}
+async function openDocumentsPicker() {
   const docs = collectDocumentRows();
-  if (!docs.length) { alert('Документы не прикреплены.'); return; }
+  if (!docs.length) { await showGeneralAlert('Документы не прикреплены.', { title: 'Документы' }); return; }
   if (docs.length === 1) { openDocumentPreview(docs[0]); return; }
   const list = docs.map((doc, index) => `${index + 1}. [${doc.type || 'Документ'}] ${doc.name || doc.path || 'Документ'}`).join('\n');
-  const selected = prompt(`Какой документ показать?\n\n${list}\n\nВведите номер документа:`, '1');
+  const selected = await showGeneralPrompt(`Какой документ показать?\n\n${list}\n\nВведите номер документа:`, '1', { title: 'Документы', inputLabel: 'Номер документа', okText: 'Показать' });
   const index = Number(selected) - 1;
   if (Number.isInteger(index) && docs[index]) openDocumentPreview(docs[index]);
 }
@@ -4094,7 +4543,7 @@ function isAbsoluteWindowsPath(value) { return /^[a-zA-Z]:[\\/]/.test(String(val
 async function openDocumentPreview(doc) {
   const path = doc?.path || '';
   if (!path) {
-    alert('Путь к документу не сохранён. Прикрепите файл заново.');
+    await showGeneralAlert('Путь к документу не сохранён. Прикрепите файл заново.', { title: 'Документы' });
     return;
   }
   currentDocumentPreview = doc;
@@ -4169,34 +4618,35 @@ function closeDocumentPreview() {
 }
 async function openDocumentExternal(doc) {
   const path = doc?.path || '';
-  if (!path) { alert('Путь к документу не сохранён.'); return; }
+  if (!path) { await showGeneralAlert('Путь к документу не сохранён.', { title: 'Документы' }); return; }
   try {
     await dbApi.openGeneralCaseDocument(path);
   } catch (apiError) {
     if (!isAbsoluteWindowsPath(path)) {
-      alert('Не удалось открыть документ:\n' + apiError.message);
+      await showGeneralAlert('Не удалось открыть документ:\n' + apiError.message, { title: 'Документы' });
       return;
     }
     try {
       const response = await fetch(`/meetings/open-local-file?path=${encodeURIComponent(path)}`);
       if (!response.ok) throw new Error(await response.text());
     } catch (error) {
-      alert('Не удалось открыть документ:\n' + error.message);
+      await showGeneralAlert('Не удалось открыть документ:\n' + error.message, { title: 'Документы' });
     }
   }
 }
 renderDocumentsRows = function renderDocumentsRowsWithReviewApproval(rows = []) {
   const list = document.querySelector('[data-general-documents-list]');
   if (!list) return;
-  const docs = Array.isArray(rows) ? rows : [];
+  const docs = (Array.isArray(rows) ? rows : []).map(normalizeDocumentRecord);
+  syncDocumentNoteFieldFromDocs(docs);
   if (!docs.length) {
     list.innerHTML = '<div class="empty-card">Документы пока не прикреплены</div>';
     syncDocumentsHiddenInput();
     return;
   }
   list.innerHTML = docs.map((doc, index) => {
-    const approval = getReviewApprovalForDocument(doc);
-    return `<div class="general-document-row" data-general-document-row data-document-index="${index}" data-name="${escapeAttr(doc.name || '')}" data-path="${escapeAttr(doc.path || '')}" data-type="${escapeAttr(doc.type || 'Иной документ')}" data-mime="${escapeAttr(doc.mime || '')}" data-added-at="${escapeAttr(doc.added_at || new Date().toISOString())}">
+    const approval = isReviewApprovalEnabled() ? getReviewApprovalForDocument(doc) : null;
+    return `<div class="general-document-row" data-general-document-row data-document-index="${index}" data-document-id="${escapeAttr(doc.id || '')}" data-name="${escapeAttr(doc.name || '')}" data-path="${escapeAttr(doc.path || '')}" data-type="${escapeAttr(doc.type || 'Иной документ')}" data-mime="${escapeAttr(doc.mime || '')}" data-note="${escapeAttr(doc.note || '')}" data-added-at="${escapeAttr(doc.added_at || new Date().toISOString())}">
       <div class="general-document-main">
         <div class="general-document-icon">${documentIcon(doc)}</div>
         <div>
@@ -4205,22 +4655,51 @@ renderDocumentsRows = function renderDocumentsRowsWithReviewApproval(rows = []) 
           <small>${escapeHtml(doc.path || 'локальный путь недоступен')}</small>
         </div>
       </div>
-      <label><span>Примечание к документу</span><input data-general-document-row-note value="${escapeAttr(doc.note || '')}" placeholder="копия жалобы / доказательство отправки / судебный акт"></label>
-      <label><span>Комментарии</span><textarea data-general-document-comment rows="2">${escapeHtml(doc.comment || '')}</textarea></label>
       <div class="general-document-row-actions">
         <button class="btn small primary" data-general-document-open-item="${index}" type="button">Предпросмотр</button>
         <button class="btn small" data-general-document-external-item="${index}" type="button">Открыть</button>
         <button class="btn small danger" data-general-document-remove type="button">−</button>
       </div>
-      ${renderReviewApprovalControls(doc, index, approval)}
+      ${isReviewApprovalEnabled() ? renderReviewApprovalControls(doc, index, approval) : ''}
     </div>`;
   }).join('');
   syncDocumentsHiddenInput();
 };
 
+function isReviewApprovalEnabled() {
+  const form = document.querySelector('[data-general-form]');
+  return Boolean(form?.elements.review_show_flag?.checked);
+}
+
 function getReviewApprovalForDocument(doc = {}) {
+  const documentId = String(doc.id || doc.document_id || '').trim();
   const path = String(doc.path || '').trim();
-  return (state.reviewApprovals || []).find(item => String(item.document_path || '').trim() === path) || null;
+  return (state.reviewApprovals || []).find(item => {
+    const itemDocumentId = String(item.document_id || item.documentId || '').trim();
+    if (documentId && itemDocumentId && itemDocumentId === documentId) return true;
+    return path && String(item.document_path || '').trim() === path;
+  }) || null;
+}
+
+function focusDocumentById(documentId = '') {
+  const id = String(documentId || '').trim();
+  if (!id) return;
+  switchGeneralCaseTab('documents');
+  setTimeout(() => {
+    const escapedId = globalThis.CSS?.escape ? CSS.escape(id) : id.replace(/["\\]/g, '\\$&');
+    const row = document.querySelector(`[data-general-document-row][data-document-id="${escapedId}"]`);
+    if (!row) return;
+    row.classList.add('is-highlighted');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => row.classList.remove('is-highlighted'), 2400);
+  }, 80);
+}
+
+function focusApprovalRequest(approvalRequestId = 0) {
+  const id = Number(approvalRequestId || 0);
+  if (!id) return;
+  const approval = (state.reviewApprovals || []).find(item => Number(item.id || 0) === id);
+  if (approval?.document_id) focusDocumentById(approval.document_id);
 }
 
 function renderReviewApprovalControls(doc = {}, index = 0, approval = null) {
@@ -4235,7 +4714,7 @@ function renderReviewApprovalControls(doc = {}, index = 0, approval = null) {
     approved: 'Согласовано',
     completed: 'Исполнено'
   }[status] || status;
-  const disabled = hasCase && isReviewDoc ? '' : ' disabled';
+  const disabled = isReviewDoc ? '' : ' disabled';
   const approvalId = approval?.id || '';
   const canSend = status === 'approved' ? '' : ' disabled';
   return `<div class="general-review-approval" data-general-review-approval>
@@ -4273,10 +4752,10 @@ async function refreshReviewApprovals(caseId = null) {
 
 async function handleReviewApprovalAction(button) {
   const form = document.querySelector('[data-general-form]');
-  const caseId = Number(form?.elements.id?.value || 0);
+  let caseId = Number(form?.elements.id?.value || 0);
   const action = button.dataset.generalReviewAction || '';
-  if (!caseId) {
-    alert('Сначала сохраните дело.');
+  if (!form) {
+    await showGeneralAlert('Карточка дела не найдена.', { title: 'Согласование' });
     return;
   }
   try {
@@ -4285,21 +4764,38 @@ async function handleReviewApprovalAction(button) {
       const docs = collectDocumentRows();
       const doc = docs[index];
       if (!doc?.path) {
-        alert('Документ не найден. Прикрепите файл заново.');
+        await showGeneralAlert('Документ не найден. Прикрепите файл заново.', { title: 'Согласование' });
         return;
       }
-      const comment = prompt('Комментарий руководителю:', '') || '';
+      if (!/отзыв|review/i.test(String(`${doc.type || ''} ${doc.name || ''}`))) {
+        await showGeneralAlert('Согласование доступно только для документа «Отзыв».', { title: 'Согласование' });
+        return;
+      }
+      if (!form.elements.review_show_flag?.checked) {
+        await showGeneralAlert('Для отправки отзыва включите пометку «Отзыв показать».', { title: 'Согласование' });
+        return;
+      }
+      syncDocumentsHiddenInput();
+      button.disabled = true;
+      const data = collectGeneralCaseFormData(form);
+      const savedCase = await persistGeneralCase(data);
+      caseId = Number(savedCase?.id || data.id || caseId || 0);
+      if (!caseId) throw new Error('Не удалось сохранить дело перед отправкой на согласование.');
+      if (form.elements.id) form.elements.id.value = caseId;
+      const savedDocs = parseDocuments(data.documents_json);
+      const savedDoc = savedDocs.find(item => String(item.id || '') === String(doc.id || '')) || savedDocs[index] || doc;
+      if (!savedDoc?.id) throw new Error('Не удалось определить сохранённый идентификатор документа.');
       await dbApi.requestGeneralCaseReviewApproval(caseId, {
-        document_index: index,
-        document_path: doc.path,
-        comment
+        documentId: savedDoc.id,
+        document_id: savedDoc.id,
+        comment: ''
       });
       showNotification('Отзыв отправлен на согласование');
     } else {
       const approvalId = Number(button.dataset.approvalId || 0);
       if (!approvalId) return;
       const comment = ['comment', 'revision', 'approve'].includes(action)
-        ? (prompt('Комментарий:', '') || '')
+        ? (await showGeneralPrompt('Комментарий:', '', { title: 'Согласование', inputLabel: 'Комментарий', okText: 'Сохранить' }) || '')
         : '';
       if (action === 'comment') {
         await dbApi.commentGeneralCaseReviewApproval(caseId, approvalId, { comment });
@@ -4317,7 +4813,9 @@ async function handleReviewApprovalAction(button) {
     }
     await refreshReviewApprovals(caseId);
   } catch (error) {
-    alert('Не удалось выполнить действие согласования:\n' + error.message);
+    await showGeneralAlert('Не удалось выполнить действие согласования:\n' + error.message, { title: 'Согласование' });
+  } finally {
+    if (action === 'request') button.disabled = false;
   }
 }
 
@@ -4334,7 +4832,12 @@ async function loadCasePlanEntries() {
     const tasks = await dbApi.getCalendarTasks({ generalCaseId: id, user: getCurrentUserName() });
     const visible = (tasks || []).filter(task => String(task.event_scope || 'work') !== 'personal');
     if (!visible.length) { list.innerHTML = '<div class="empty-card">Связанных событий и заметок пока нет.</div>'; return; }
-    list.innerHTML = visible.map(task => `<article class="general-case-plan-item"><div><span>${escapeHtml(formatPlanDate(task))}</span><b>${escapeHtml(task.description || task.desc || 'Событие')}</b><p>${escapeHtml(task.note_text || task.assignment || '')}</p></div><em>${escapeHtml(planTaskLabel(task))}</em></article>`).join('');
+    list.innerHTML = visible.map(task => {
+      const meta = parseTaskMetadata(task);
+      const autoAppeal = meta.source === 'general_case_appeal' || isGeneralAutoCalendarTask(task);
+      const title = String(task.description || task.desc || 'Событие').replace('[Авто общего перечня] ', '');
+      return `<article class="general-case-plan-item ${autoAppeal ? 'is-linked' : ''}" ${autoAppeal ? `data-general-plan-open-case="${escapeAttr(meta.caseId || task.general_case_id || '')}" data-appeal-row-id="${escapeAttr(meta.appealRowId || '')}"` : ''} tabindex="${autoAppeal ? '0' : '-1'}"><div><span>${escapeHtml(formatPlanDate(task))}</span><b>${escapeHtml(title)}</b>${autoAppeal ? '' : `<p>${escapeHtml(task.note_text || task.assignment || '')}</p>`}</div><em>${escapeHtml(planTaskLabel(task))}</em></article>`;
+    }).join('');
   } catch (error) {
     list.innerHTML = `<div class="empty-card error">Не удалось загрузить план: ${escapeHtml(error.message)}</div>`;
   }
@@ -4344,11 +4847,34 @@ function planTaskLabel(task = {}) { const type = String(task.task_type || task.t
 function openCasePlanInCalendar() {
   const form = document.querySelector('[data-general-form]');
   const id = Number(form?.elements.id?.value || 0);
-  if (!id) { alert('Сначала сохраните карточку дела.'); return; }
+  if (!id) { showGeneralAlert('Сначала сохраните карточку дела.', { title: 'План и заметки' }); return; }
   const row = state.rows.find(item => Number(item.id) === id) || collectGeneralCaseFormData(form);
   closeGeneralDialog();
   if (typeof window.openView === 'function') window.openView('calendar');
   setTimeout(() => window.dispatchEvent(new CustomEvent('calendar:create-for-case', { detail: { case: { ...row, id } } })), 180);
+}
+
+async function openGeneralCaseFromPlanItem(node) {
+  const caseId = Number(node?.dataset.generalPlanOpenCase || 0);
+  const appealRowId = String(node?.dataset.appealRowId || '').trim();
+  if (!caseId) return;
+  await openGeneralCaseById(caseId, null, { sourceView: 'generalCases' });
+  setTimeout(() => focusAppealRowById(appealRowId), 80);
+}
+
+function focusAppealRowById(appealRowId = '') {
+  switchGeneralCaseTab('appeal');
+  const dialog = getCurrentGeneralDialog();
+  const safeAppealRowId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(appealRowId) : appealRowId.replace(/["\\]/g, '\\$&');
+  const row = appealRowId
+    ? dialog?.querySelector(`[data-general-appeal-row][data-appeal-row-id="${safeAppealRowId}"]`)
+    : dialog?.querySelector('[data-general-appeal-row]');
+  if (row) {
+    renderAppealRowResult(row);
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const firstField = row.querySelector('select, input, textarea, button');
+    try { firstField?.focus?.({ preventScroll: true }); } catch {}
+  }
 }
 function readCommentViewState() { try { return JSON.parse(localStorage.getItem(GENERAL_CASE_COMMENTS_VIEWED_KEY) || '{}'); } catch { return {}; } }
 function saveCommentViewState(stateObject) { localStorage.setItem(GENERAL_CASE_COMMENTS_VIEWED_KEY, JSON.stringify(stateObject || {})); }
@@ -4357,8 +4883,61 @@ function markCommentViewed(row = {}) { if (!row?.id || !commentSignature(row)) r
 function getCommentBadge(row = {}) { const comment = commentSignature(row); if (!comment) return ''; const map = readCommentViewState(); const viewed = map[row.id]; if (viewed?.signature === comment && viewed?.viewed_at) return `<span class="case-badge comment viewed">Просмотрено ${escapeHtml(viewed.viewed_at)}</span>`; return '<span class="case-badge comment new">Есть комментарий</span>'; }
 function applyRuDateMask(input) { const digits = String(input.value || '').replace(/\D/g, '').slice(0, 8); let value = digits; if (digits.length > 4) value = `${digits.slice(0,2)}.${digits.slice(2,4)}.${digits.slice(4)}`; else if (digits.length > 2) value = `${digits.slice(0,2)}.${digits.slice(2)}`; input.value = value; }
 
-function setAppealBlockVisible(visible) { const block = document.querySelector('[data-general-appeal-block]'); const empty = document.querySelector('[data-general-appeal-empty]'); if (block) block.hidden = !visible; if (empty) empty.hidden = Boolean(visible); }
-function collectAppealRows() { return Array.from(document.querySelectorAll('[data-general-appeal-row]')).map(row => { const item = getAppealRowData(row); return { ...item, title: item.appeal_kind || 'Апелляция', date: item.event_date || '' }; }).filter(row => row.event_date || row.process_kind || row.act_instance || row.appeal_kind || row.submitted || row.note || row.next_motivated_date); }
+function getCurrentGeneralDialog() {
+  return document.querySelector('[data-general-dialog].is-open')
+    || document.querySelector('[data-general-dialog][open]')
+    || document.querySelector('[data-general-dialog]');
+}
+
+function getCurrentAppealRowsContainer() {
+  return getCurrentGeneralDialog()?.querySelector('[data-general-appeal-rows]') || null;
+}
+
+function getCurrentGeneralForm() {
+  return getCurrentGeneralDialog()?.querySelector('[data-general-form]') || document.querySelector('[data-general-form]');
+}
+
+function resetAppealCalculatorStateForDialog(caseId = 0) {
+  state.currentDialogCaseId = Number(caseId || 0);
+  const dialog = getCurrentGeneralDialog();
+  const container = dialog?.querySelector('[data-general-appeal-rows]');
+  const suggestions = dialog?.querySelector('[data-general-appeal-suggestions]');
+  if (dialog) dialog.dataset.currentCaseId = String(state.currentDialogCaseId || '');
+  if (container) container.dataset.currentCaseId = String(state.currentDialogCaseId || '');
+  if (!caseId && container) container.innerHTML = '';
+  if (!caseId && suggestions) {
+    suggestions.hidden = true;
+    suggestions.innerHTML = '';
+  }
+}
+
+function setAppealBlockVisible(visible) { const dialog = getCurrentGeneralDialog(); const block = dialog?.querySelector('[data-general-appeal-block]') || document.querySelector('[data-general-appeal-block]'); const empty = dialog?.querySelector('[data-general-appeal-empty]') || document.querySelector('[data-general-appeal-empty]'); if (block) block.hidden = !visible; if (empty) empty.hidden = Boolean(visible); }
+function collectAppealRows() { const container = getCurrentAppealRowsContainer(); return Array.from(container?.querySelectorAll('[data-general-appeal-row]') || []).map(row => { const item = normalizeAppealRowData(getAppealRowData(row)); return { ...item, title: item.appeal_label || item.appeal_kind || getAppealTypeLabel(item.appeal_type_code), date: item.event_date || '' }; }).filter(row => row.event_date || row.process_kind || row.act_instance || row.appeal_type_code || row.appeal_kind || row.submitted || row.note || row.next_motivated_date); }
+function renderAppealRows(rows = []) {
+  const container = getCurrentAppealRowsContainer();
+  if (!container) return;
+  const list = Array.isArray(rows) ? rows : [];
+  container.innerHTML = list.map(rawRow => {
+    const row = normalizeAppealRowData(rawRow);
+    return renderAppealRow({
+    appeal_row_id: row.appeal_row_id,
+    appeal_type_code: row.appeal_type_code,
+    appeal_label: row.appeal_label,
+    process_kind: row.process_kind || row.processKind || 'ГПК',
+    act_instance: row.act_instance || row.actInstance || 'Первая инстанция',
+    appeal_kind: row.appeal_label || row.appeal_kind || row.appealKind || row.title || getAppealTypeLabel(row.appeal_type_code),
+    act_type: row.act_type || row.first_instance_act_type || DEFAULT_APPEAL_ACT_TYPE,
+    event_date: row.event_date || row.date || '',
+    late_motivated_received: row.late_motivated_received || row.lateMotivatedReceived || 'Нет',
+    submitted: row.submitted || false,
+    note: row.note || '',
+    next_motivated_date: row.next_motivated_date || ''
+  });
+  }).join('');
+  setAppealBlockVisible(Boolean(list.length));
+  container.querySelectorAll('[data-general-appeal-row]').forEach(renderAppealRowResult);
+  renderAppealSuggestions();
+}
 function __old_renderAppealRows_2(rows = []) { const container = document.querySelector('[data-general-appeal-rows]'); if (!container) return; const motivated = document.querySelector('[data-general-form]')?.elements.motivated_decision_date?.value?.trim() || ''; const list = Array.isArray(rows) && rows.length ? rows : []; container.innerHTML = list.map(row => renderAppealRow({ process_kind: row.process_kind || row.processKind || 'ГПК', act_instance: row.act_instance || row.actInstance || 'Первая инстанция', appeal_kind: row.appeal_kind || row.appealKind || row.title || 'Апелляция', event_date: row.event_date || row.date || motivated, late_motivated_received: row.late_motivated_received || row.lateMotivatedReceived || 'Нет', submitted: row.submitted || false, note: row.note || '', next_motivated_date: row.next_motivated_date || '' })).join(''); setAppealBlockVisible(Boolean(list.length)); container.querySelectorAll('[data-general-appeal-row]').forEach(renderAppealRowResult); renderAppealSuggestions(); }
 function __old_renderAppealRow_2(row = {}) {
   const processKind = row.process_kind || 'ГПК', actInstance = row.act_instance || 'Первая инстанция', appealKind = normalizeAppealKind(row.appeal_kind || 'Апелляция'), eventDate = row.event_date || '', late = row.late_motivated_received || 'Нет', submitted = Boolean(row.submitted), note = row.note || '', nextMotivatedDate = row.next_motivated_date || '';
@@ -4369,12 +4948,12 @@ function __old_renderAppealRow_2(row = {}) {
     <label><span data-general-appeal-date-label>${appealDateLabel(appealKind)}</span><input data-general-appeal-date data-ru-date value="${escapeAttr(eventDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label>
     <label class="general-appeal-late-field" data-general-appeal-late-wrap ${appealKind === 'Апелляция' ? '' : 'hidden'}><span>Акт получен с нарушением срока изготовления мотивированной части?</span><select data-general-appeal-control data-general-appeal-late>${option('Нет','Нет',late)}${option('Да','Да',late)}</select></label>
     <button class="btn small" data-general-appeal-remove type="button" title="Удалить событие">−</button><div class="general-appeal-event-result" data-general-appeal-row-result></div>
-    <div class="general-appeal-submitted-line"><button class="general-appeal-check ${submitted ? 'checked' : ''}" data-general-appeal-submitted type="button">${submitted ? '✓' : ''}</button><span class="general-appeal-submitted-text" ${submitted ? '' : 'hidden'}>Жалоба подана</span></div>
+    <button class="general-appeal-submitted-button general-appeal-submitted-line" data-general-appeal-submitted type="button" aria-pressed="${submitted ? 'true' : 'false'}" title="${submitted ? 'Снять отметку о подаче жалобы' : 'Отметить жалобу как поданную'}"><span class="general-appeal-check ${submitted ? 'checked' : ''}" aria-hidden="true">${submitted ? '✓' : ''}</span><span class="general-appeal-submitted-text">Жалоба подана</span></button>
     <div class="general-appeal-after-submit" data-general-appeal-after-submit ${submitted ? '' : 'hidden'}><label><span>Примечание</span><textarea data-general-appeal-note rows="2">${escapeHtml(note)}</textarea></label><label><span>Дата изготовления мотивированной части судебного акта</span><input data-general-appeal-next-date data-ru-date value="${escapeAttr(nextMotivatedDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label></div>
   </div>`;
 }
-function addAppealRow(row = {}) { setAppealBlockVisible(true); switchGeneralCaseTab('appeal'); const container = document.querySelector('[data-general-appeal-rows]'); if (!container) return; const form = document.querySelector('[data-general-form]'); const motivated = form?.elements.motivated_decision_date?.value?.trim() || ''; const appealAct = form?.elements.appeal_act_date?.value?.trim() || ''; const cassationAct = form?.elements.cassation_act_date?.value?.trim() || ''; const base = { event_date: row.event_date || row.date || motivated, ...row }; const kind = normalizeAppealKind(base.appeal_kind || 'Апелляция'); if (!base.event_date) { if (kind === 'Кассация' && appealAct) base.event_date = appealAct; if (kind === 'Кассация в Верховный суд РФ' && cassationAct) base.event_date = cassationAct; } container.insertAdjacentHTML('beforeend', renderAppealRow(base)); renderAppealRowResult(container.lastElementChild); renderAppealSuggestions(true); }
-function removeAppealRow(button) { button.closest('[data-general-appeal-row]')?.remove(); if (!document.querySelector('[data-general-appeal-row]')) setAppealBlockVisible(false); renderAppealSuggestions(); }
+function addAppealRow(row = {}) { setAppealBlockVisible(true); switchGeneralCaseTab('appeal'); const container = getCurrentAppealRowsContainer(); if (!container) return; const form = getCurrentGeneralForm(); const motivated = form?.elements.motivated_decision_date?.value?.trim() || ''; const appealAct = form?.elements.appeal_act_date?.value?.trim() || ''; const cassationAct = form?.elements.cassation_act_date?.value?.trim() || ''; const base = normalizeAppealRowData({ event_date: row.event_date || row.date || motivated, ...row }); const code = normalizeAppealTypeCode(base.appeal_type_code, base.appeal_kind); if (code === 'cassation_transfer_refusal' && !row.event_date && !row.date) base.event_date = ''; if (!base.event_date) { if (code === 'cassation' && appealAct) base.event_date = appealAct; if (code === 'cassation_supreme_court' && cassationAct) base.event_date = cassationAct; } container.insertAdjacentHTML('beforeend', renderAppealRow(base)); const addedRow = container.lastElementChild; renderAppealRowResult(addedRow); renderAppealSuggestions(); requestAnimationFrame(() => { addedRow?.scrollIntoView({ behavior: 'smooth', block: 'center' }); const firstField = addedRow?.querySelector('select, input, textarea, button'); try { firstField?.focus?.(); } catch {} }); }
+function removeAppealRow(button) { const container = getCurrentAppealRowsContainer(); button.closest('[data-general-appeal-row]')?.remove(); if (!container?.querySelector('[data-general-appeal-row]')) setAppealBlockVisible(false); renderAppealSuggestions(); }
 function __old_renderAppealRowResult_2(rowNode) {
   if (!rowNode) return;
   const dateLabel = rowNode.querySelector('[data-general-appeal-date-label]'), resultNode = rowNode.querySelector('[data-general-appeal-row-result]'), lateWrap = rowNode.querySelector('[data-general-appeal-late-wrap]'), submitted = rowNode.classList.contains('is-submitted'), check = rowNode.querySelector('[data-general-appeal-submitted]'), submittedText = rowNode.querySelector('.general-appeal-submitted-text'), afterSubmit = rowNode.querySelector('[data-general-appeal-after-submit]'), processKind = rowNode.querySelector('[data-general-appeal-process]')?.value || 'ГПК', appealKind = normalizeAppealKind(rowNode.querySelector('[data-general-appeal-kind]')?.value || 'Апелляция'), late = rowNode.querySelector('[data-general-appeal-late]')?.value || 'Нет';
@@ -4386,9 +4965,9 @@ function __old_renderAppealRowResult_2(rowNode) {
   resultNode.innerHTML = `<p>${escapeHtml(explanation)}</p><p>${deadlineText}</p>${result?.rule ? `<p class="muted">${escapeHtml(result.rule)}</p>` : ''}${lateWarning}${expired}`;
 }
 function __old_getAppealRowData_2(rowNode) { return { process_kind: rowNode.querySelector('[data-general-appeal-process]')?.value || 'ГПК', act_instance: rowNode.querySelector('[data-general-appeal-instance]')?.value || 'Первая инстанция', appeal_kind: normalizeAppealKind(rowNode.querySelector('[data-general-appeal-kind]')?.value || 'Апелляция'), event_date: rowNode.querySelector('[data-general-appeal-date]')?.value?.trim() || '', late_motivated_received: rowNode.querySelector('[data-general-appeal-late]')?.value || 'Нет', submitted: rowNode.classList.contains('is-submitted'), note: rowNode.querySelector('[data-general-appeal-note]')?.value?.trim() || '', next_motivated_date: rowNode.querySelector('[data-general-appeal-next-date]')?.value?.trim() || '' }; }
-function renderAppealSuggestions(forcePrompt = false) { const node = document.querySelector('[data-general-appeal-suggestions]'), form = document.querySelector('[data-general-form]'); if (!node || !form) return; try { document.querySelectorAll('[data-general-appeal-row]').forEach(renderAppealRowResult); const data = collectGeneralCaseFormData(form), tasks = buildGeneralCaseAutoTasks({ ...data, id: data.id || 'preview' }, data, { preview: true }); if (!tasks.length) { node.hidden = true; node.innerHTML = ''; return; } node.hidden = false; node.innerHTML = `<h5>Автоматически будут добавлены в план и календарь:</h5>${tasks.map(task => `<div class="general-appeal-suggestion"><b>${formatText(task.dateRu)}</b><span>${formatText(task.desc.replace('[Авто общего перечня] ', ''))}</span></div>`).join('')}`; if (forcePrompt && tasks[0]) alert(`Последний срок подачи жалобы — ${tasks[0].dateRu}.\n\nЭтот срок будет указан в плане и календаре после сохранения дела.`); } catch (error) { console.warn('Ошибка расчета подсказок обжалования', error); node.hidden = true; node.innerHTML = ''; } }
+function renderAppealSuggestions(forcePrompt = false) { const dialog = getCurrentGeneralDialog(), node = dialog?.querySelector('[data-general-appeal-suggestions]'), form = getCurrentGeneralForm(), container = getCurrentAppealRowsContainer(); if (!node || !form) return; try { container?.querySelectorAll('[data-general-appeal-row]').forEach(renderAppealRowResult); const data = collectGeneralCaseFormData(form), tasks = buildGeneralCaseAutoTasks({ ...data, id: data.id || 'preview' }, data, { preview: true }); if (!tasks.length) { node.hidden = true; node.innerHTML = ''; return; } node.hidden = false; node.innerHTML = `<h5>Автоматически будут добавлены в план и календарь:</h5>${tasks.map(task => `<div class="general-appeal-suggestion"><b>${formatText(task.dateRu)}</b><span>${formatText(task.desc.replace('[Авто общего перечня] ', ''))}</span></div>`).join('')}`; } catch (error) { console.warn('Ошибка расчета подсказок обжалования', error); node.hidden = true; node.innerHTML = ''; } }
 function getAppealSummary(row) { const rows = parseAppeals(row.appeals_json), calculated = []; for (const item of rows) { const result = calculateAppealDeadlineFromAppealEvent(item), submitted = item.submitted ? ' · жалоба подана' : ''; if (item.appeal_kind === 'Жалоба в Конституционный суд РФ') calculated.push('Конституционный суд РФ: срок законом не ограничен' + submitted); else if (result?.dateRu) calculated.push(`${item.appeal_kind || 'Обжалование'}: ${item.event_date || item.date} → срок до ${result.dateRu}${submitted}`); } return calculated.length ? calculated.join('\n') : getAppealValue(row); }
-function confirmAppealDeadlinesBeforeSave(data) { const lines = parseAppeals(data.appeals_json).map(item => { const result = calculateAppealDeadlineFromAppealEvent(item); if (item.appeal_kind === 'Жалоба в Конституционный суд РФ') return 'Конституционный суд РФ: срок не рассчитывается.'; return result?.dateRu ? `${item.appeal_kind || 'Обжалование'}: последний срок подачи жалобы — ${result.dateRu}` : ''; }).filter(Boolean); if (lines.length) alert(`${lines.join('\n')}\n\nСроки будут добавлены в план и календарь после сохранения дела.`); }
+function confirmAppealDeadlinesBeforeSave() {}
 async function syncGeneralCaseAutoTasks(savedCase, data, previousRow = null) { const allTasks = await dbApi.getCalendarTasks({}).catch(() => []); const existingAutoTasks = allTasks.filter(task => Number(task.general_case_id) === Number(savedCase.id) && String(task.description || task.desc || '').startsWith('[Авто общего перечня]')); for (const task of existingAutoTasks) { try { await dbApi.deleteCalendarTask(task.id); } catch {} } const tasks = buildGeneralCaseAutoTasks(savedCase, data); for (const task of tasks) { try { await dbApi.createCalendarTask({ date: task.dateIso, user: task.user, type: task.type, desc: task.desc, time: '', court: data.court || '', subject: data.claim_subject || '', assignment: task.assignment, general_case_id: savedCase.id }); } catch (error) { console.warn('Не удалось создать автозадачу', error); } } if (tasks.length) showNotification(`Автоматически добавлено задач в план/календарь: ${tasks.length}`); }
 function buildGeneralCaseAutoTasks(savedCase, data, { preview = false } = {}) { const tasks = [], user = data.executor || getCurrentUserName() || 'Администратор', caseNo = data.case_no || savedCase.case_no || '', baseAssignment = `Дело № ${caseNo}\nИстец: ${data.plaintiff || ''}\nОтветчик: ${data.defendant || ''}\nПредмет: ${data.claim_subject || ''}${data.claim_address ? '\nАдрес: ' + data.claim_address : ''}`.trim(); for (const item of parseAppeals(data.appeals_json)) { const result = calculateAppealDeadlineFromAppealEvent(item); if (!result?.dateIso) continue; tasks.push({ dateIso: result.dateIso, dateRu: result.dateRu, user, type: 'поручение', desc: `[Авто общего перечня] Последний день подачи ${String(item.appeal_kind || 'жалобы').toLowerCase()} по делу № ${caseNo}`, assignment: `${baseAssignment}\nВид производства: ${item.process_kind || 'ГПК'}\nИнстанция: ${item.act_instance || ''}\nВид обжалования: ${item.appeal_kind || ''}\nДата акта/мотивировки: ${item.event_date || item.date || ''}\nРасчёт: ${result.rule}${item.submitted ? '\nСтатус: жалоба подана' : ''}${item.note ? '\nПримечание: ' + item.note : ''}` }); } return preview ? tasks.slice(0, 6) : tasks; }
 function calculateAppealDeadlineFromForm(data = {}) { const firstRow = parseAppeals(data.appeals_json)[0]; return firstRow ? calculateAppealDeadlineFromAppealEvent(firstRow) : null; }
@@ -4397,8 +4976,10 @@ function __old_calculateAppealDeadlineFromAppealEvent_2(item = {}) { const appea
 /* ===== Appeal calculator full specification overrides 2026-06 ===== */
 function switchGeneralCaseTab(tab = 'info') {
   const safeTab = ['info', 'documents', 'plan', 'appeal'].includes(tab) ? tab : 'info';
-  document.querySelectorAll('[data-general-case-tab]').forEach(button => button.classList.toggle('is-active', button.dataset.generalCaseTab === safeTab));
-  document.querySelectorAll('[data-general-case-tab-panel]').forEach(panel => {
+  const dialog = getCurrentGeneralDialog();
+  dialog?.classList.toggle('general-case-dialog-plan-wide', safeTab === 'plan');
+  dialog?.querySelectorAll('[data-general-case-tab]').forEach(button => button.classList.toggle('is-active', button.dataset.generalCaseTab === safeTab));
+  dialog?.querySelectorAll('[data-general-case-tab-panel]').forEach(panel => {
     panel.hidden = panel.dataset.generalCaseTabPanel !== safeTab;
     panel.classList.toggle('is-active', panel.dataset.generalCaseTabPanel === safeTab);
   });
@@ -4406,31 +4987,31 @@ function switchGeneralCaseTab(tab = 'info') {
 }
 
 function renderAppealRow(row = {}) {
+  row = normalizeAppealRowData(row);
   const processKind = row.process_kind || 'ГПК';
   const actInstance = row.act_instance || 'Первая инстанция';
-  const appealKind = normalizeAppealKind(row.appeal_kind || 'Апелляция');
-  const actType = row.act_type || 'Итоговое решение';
+  const appealTypeCode = normalizeAppealTypeCode(row.appeal_type_code, row.appeal_kind);
+  const appealKind = getAppealTypeLabel(appealTypeCode, row.appeal_kind);
+  const actType = normalizeAppealActType(row.act_type || DEFAULT_APPEAL_ACT_TYPE);
   const eventDate = row.event_date || row.date || '';
   const late = row.late_motivated_received || 'Нет';
-  const supremeCassationExists = row.supreme_cassation_exists || 'Да';
   const isDebtor = row.is_debtor || 'Да';
   const interimType = row.interim_type || '';
   const submitted = Boolean(row.submitted);
   const note = row.note || '';
-  return `<div class="general-appeal-row general-appeal-event-row ${submitted ? 'is-submitted' : ''}" data-general-appeal-row>
+  return `<div class="general-appeal-row general-appeal-event-row ${submitted ? 'is-submitted' : ''}" data-general-appeal-row data-appeal-row-id="${escapeAttr(row.appeal_row_id)}" data-appeal-type-code="${escapeAttr(appealTypeCode)}" data-submitted="${submitted ? 'true' : 'false'}">
     <label><span>Вид производства</span><select data-general-appeal-control data-general-appeal-process required>${option('ГПК','Гражданский процесс (ГПК РФ)',processKind)}${option('АПК','Арбитражный процесс (АПК РФ)',processKind)}${option('КАС','Административное судопроизводство (КАС РФ)',processKind)}${option('УПК','Уголовный процесс (УПК РФ)',processKind)}</select></label>
     <label><span>Инстанция, вынесшая акт</span><select data-general-appeal-control data-general-appeal-instance required>${option('Первая инстанция','Первая инстанция',actInstance)}${option('Апелляционная инстанция','Апелляционная инстанция',actInstance)}${option('Кассационная инстанция','Кассационная инстанция',actInstance)}</select></label>
-    <label><span>Вид обжалования</span><select data-general-appeal-control data-general-appeal-kind required>${option('Апелляция','Апелляция',appealKind)}${option('Кассация','Кассация',appealKind)}${option('Кассация в Верховный суд РФ','Кассация (ВС РФ)',appealKind)}${option('Жалоба в Конституционный суд РФ','Конституционный суд РФ',appealKind)}</select></label>
-    <label data-general-act-type-wrap><span>Тип судебного акта</span><select data-general-appeal-control data-general-appeal-act-type>${option('Итоговое решение','Итоговое решение',actType)}${option('Судебный приказ','Судебный приказ',actType)}${option('Заочное решение','Заочное решение',actType)}${option('Определение (промежуточное)','Определение (промежуточное)',actType)}</select></label>
+    <label><span>Вид обжалования</span><select data-general-appeal-control data-general-appeal-kind required>${renderAppealTypeOptions(appealTypeCode, appealKind)}</select></label>
+    <label data-general-act-type-wrap><span>Тип судебного акта</span><select data-general-appeal-control data-general-appeal-act-type>${renderAppealActTypeOptions(actType)}</select></label>
     <label class="general-appeal-late-field" data-general-appeal-late-wrap><span>Акт получен с нарушением срока изготовления мотивированной части?</span><select data-general-appeal-control data-general-appeal-late>${option('Нет','Нет',late)}${option('Да','Да',late)}</select></label>
-    <label data-general-supreme-cassation-wrap ${appealKind === 'Кассация в Верховный суд РФ' ? '' : 'hidden'}><span>Было ли вынесено определение кассационного суда?</span><select data-general-appeal-control data-general-supreme-cassation>${option('Да','Да',supremeCassationExists)}${option('Нет','Нет',supremeCassationExists)}</select></label>
     <label data-general-debtor-wrap ${actType === 'Судебный приказ' ? '' : 'hidden'}><span>Вы являетесь должником?</span><select data-general-appeal-control data-general-is-debtor>${option('Да','Да',isDebtor)}${option('Нет','Нет',isDebtor)}</select></label>
     <label data-general-interim-type-wrap><span>Вид определения</span><select data-general-appeal-control data-general-interim-type>${option('','Не выбрано',interimType)}${option('Определение о возвращении искового заявления','Определение о возвращении искового заявления',interimType)}${option('Определение об отказе в принятии искового заявления','Определение об отказе в принятии искового заявления',interimType)}${option('Определение об оставлении искового заявления без движения','Определение об оставлении искового заявления без движения',interimType)}${option('Определение об отказе в обеспечении иска','Определение об отказе в обеспечении иска',interimType)}${option('Определение о приостановлении производства по делу','Определение о приостановлении производства по делу',interimType)}${option('Определение о прекращении производства по делу','Определение о прекращении производства по делу',interimType)}${option('Определение о передаче дела по подсудности','Определение о передаче дела по подсудности',interimType)}${option('Определение о наложении судебного штрафа','Определение о наложении судебного штрафа',interimType)}${option('Определение об отказе в утверждении мирового соглашения','Определение об отказе в утверждении мирового соглашения',interimType)}${option('Определения по делам о банкротстве','Определения по делам о банкротстве',interimType)}</select></label>
-    <label><span data-general-appeal-date-label>${appealDateLabelFull(appealKind, actType)}</span><input data-general-appeal-date data-ru-date value="${escapeAttr(eventDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label>
+    <label class="general-appeal-date-field"><span data-general-appeal-date-label>${appealDateLabelFull(appealKind, actType)}</span><input data-general-appeal-date data-ru-date value="${escapeAttr(eventDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label>
     <button class="btn small" data-general-appeal-remove type="button" title="Удалить событие">−</button>
     <div class="general-appeal-event-result" data-general-appeal-row-result></div>
-    <div class="general-appeal-actions"><button class="btn small primary" data-general-calc-row type="button">Рассчитать срок</button><button class="btn small" data-general-print-row type="button">Распечатать результат</button><button class="btn small" data-general-restore-template type="button">Сформировать заявление о восстановлении срока</button></div>
-    <div class="general-appeal-submitted-line"><button class="general-appeal-check ${submitted ? 'checked' : ''}" data-general-appeal-submitted type="button">${submitted ? '✓' : ''}</button><span class="general-appeal-submitted-text" ${submitted ? '' : 'hidden'}>Жалоба подана</span></div>
+    <div class="general-appeal-actions"><button class="btn small" data-general-print-row type="button">Распечатать результат</button><button class="btn small" data-general-restore-template type="button">Сформировать заявление о восстановлении срока</button></div>
+    <button class="general-appeal-submitted-button general-appeal-submitted-line" data-general-appeal-submitted type="button" aria-pressed="${submitted ? 'true' : 'false'}" title="${submitted ? 'Снять отметку о подаче жалобы' : 'Отметить жалобу как поданную'}"><span class="general-appeal-check ${submitted ? 'checked' : ''}" aria-hidden="true">${submitted ? '✓' : ''}</span><span class="general-appeal-submitted-text">Жалоба подана</span></button>
     <div class="general-appeal-after-submit" data-general-appeal-after-submit ${submitted ? '' : 'hidden'}><label><span>Примечание</span><textarea data-general-appeal-note rows="2">${escapeHtml(note)}</textarea></label></div>
   </div>`;
 }
@@ -4442,19 +5023,24 @@ function appealDateLabelFull(appealKind, actType) {
 }
 
 function getAppealRowData(rowNode) {
+  const typeSelect = rowNode.querySelector('[data-general-appeal-kind]');
+  const appealTypeCode = normalizeAppealTypeCode(typeSelect?.value || rowNode.dataset.appealTypeCode || DEFAULT_APPEAL_TYPE_CODE, typeSelect?.selectedOptions?.[0]?.textContent || '');
+  const appealLabel = getAppealTypeLabel(appealTypeCode, typeSelect?.selectedOptions?.[0]?.textContent || '');
   return {
+    appeal_row_id: rowNode.dataset.appealRowId || makeAppealRowId(),
+    appeal_type_code: appealTypeCode,
     process_kind: rowNode.querySelector('[data-general-appeal-process]')?.value || 'ГПК',
     act_instance: rowNode.querySelector('[data-general-appeal-instance]')?.value || 'Первая инстанция',
-    appeal_kind: normalizeAppealKind(rowNode.querySelector('[data-general-appeal-kind]')?.value || 'Апелляция'),
-    act_type: rowNode.querySelector('[data-general-appeal-act-type]')?.value || 'Итоговое решение',
+    appeal_kind: appealLabel,
+    appeal_label: appealLabel,
+    act_type: normalizeAppealActType(rowNode.querySelector('[data-general-appeal-act-type]')?.value || DEFAULT_APPEAL_ACT_TYPE),
     event_date: rowNode.querySelector('[data-general-appeal-date]')?.value?.trim() || '',
     late_motivated_received: rowNode.querySelector('[data-general-appeal-late]')?.value || 'Нет',
-    supreme_cassation_exists: rowNode.querySelector('[data-general-supreme-cassation]')?.value || 'Да',
     is_debtor: rowNode.querySelector('[data-general-is-debtor]')?.value || 'Да',
     interim_type: rowNode.querySelector('[data-general-interim-type]')?.value || '',
-    submitted: rowNode.classList.contains('is-submitted'),
+    submitted: rowNode.dataset.submitted === 'true',
     note: rowNode.querySelector('[data-general-appeal-note]')?.value?.trim() || '',
-    title: rowNode.querySelector('[data-general-appeal-kind]')?.value || 'Апелляция',
+    title: appealLabel,
     date: rowNode.querySelector('[data-general-appeal-date]')?.value?.trim() || ''
   };
 }
@@ -4463,28 +5049,41 @@ function renderAppealRowResult(rowNode) {
   if (!rowNode) return;
   const data = getAppealRowData(rowNode);
   const resultNode = rowNode.querySelector('[data-general-appeal-row-result]');
-  const kind = data.appeal_kind;
+  const code = normalizeAppealTypeCode(data.appeal_type_code, data.appeal_kind);
+  const kind = normalizeAppealKind(code);
   const actType = data.act_type;
   const setHidden = (sel, hidden) => { const el = rowNode.querySelector(sel); if (el) el.hidden = hidden; };
   setHidden('[data-general-act-type-wrap]', data.act_instance !== 'Первая инстанция');
-  setHidden('[data-general-appeal-late-wrap]', kind !== 'Апелляция');
-  setHidden('[data-general-supreme-cassation-wrap]', kind !== 'Кассация в Верховный суд РФ');
+  setHidden('[data-general-appeal-late-wrap]', code !== 'appeal');
   setHidden('[data-general-debtor-wrap]', actType !== 'Судебный приказ');
   setHidden('[data-general-interim-type-wrap]', actType !== 'Определение (промежуточное)');
+  if (rowNode.dataset.appealTypeCode && rowNode.dataset.appealTypeCode !== code && code === 'cassation_transfer_refusal') {
+    const dateInput = rowNode.querySelector('[data-general-appeal-date]');
+    if (dateInput) dateInput.value = '';
+  }
+  rowNode.dataset.appealTypeCode = code;
   const dateLabel = rowNode.querySelector('[data-general-appeal-date-label]');
-  if (dateLabel) dateLabel.textContent = appealDateLabelFull(kind, actType);
+  if (dateLabel) dateLabel.textContent = appealDateLabelFull(code, actType);
   const check = rowNode.querySelector('[data-general-appeal-submitted]');
   const submittedText = rowNode.querySelector('.general-appeal-submitted-text');
   const afterSubmit = rowNode.querySelector('[data-general-appeal-after-submit]');
-  if (check) { check.classList.toggle('checked', data.submitted); check.textContent = data.submitted ? '✓' : ''; }
-  if (submittedText) submittedText.hidden = !data.submitted;
+  const checkMark = rowNode.querySelector('.general-appeal-check');
+  rowNode.classList.toggle('is-submitted', data.submitted);
+  if (check) {
+    check.setAttribute('aria-pressed', data.submitted ? 'true' : 'false');
+    check.title = data.submitted ? 'Снять отметку о подаче жалобы' : 'Отметить жалобу как поданную';
+  }
+  if (checkMark) {
+    checkMark.classList.toggle('checked', data.submitted);
+    checkMark.textContent = data.submitted ? '✓' : '';
+  }
+  if (submittedText) submittedText.hidden = false;
   if (afterSubmit) afterSubmit.hidden = !data.submitted;
   if (!resultNode) return;
   const result = calculateAppealDeadlineFromAppealEvent(data);
   const lines = [];
   const warnings = [];
   if (kind === 'Апелляция' && data.late_motivated_received === 'Да') warnings.push('Акт получен с нарушением срока изготовления мотивированной части. Срок может быть восстановлен судом при наличии уважительных причин. Рекомендуется приложить ходатайство о восстановлении срока.');
-  if (kind === 'Кассация в Верховный суд РФ' && data.supreme_cassation_exists === 'Нет') warnings.push('Для обращения в Верховный суд РФ необходимо сначала получить определение кассационного суда общей юрисдикции или арбитражного суда округа.');
   if (kind === 'Жалоба в Конституционный суд РФ') {
     resultNode.innerHTML = `<p>${escapeHtml(getAppealKindExplanation(data.process_kind, kind))}</p><ul><li>Пройдена ли апелляция?</li><li>Пройдена ли кассация в суд общей юрисдикции или арбитражный суд округа?</li><li>Пройдена ли кассация в Верховный суд РФ?</li><li>Обжалуется ли конституционность закона, а не фактические обстоятельства дела?</li></ul>`;
     return;
@@ -4500,21 +5099,26 @@ function renderAppealRowResult(rowNode) {
     lines.push(`<span class="muted">${escapeHtml(result.explanation || result.rule || '')}</span>`);
     if (expired) warnings.push('Срок подачи жалобы пропущен. Вы можете подать заявление о восстановлении процессуального срока в суд, вынесший обжалуемый акт, при наличии уважительных причин. Предельный срок для подачи заявления о восстановлении — 6 месяцев со дня вступления акта в законную силу.');
   } else {
-    lines.push('<b>Введите дату, чтобы рассчитать срок.</b>');
+    lines.push('<b>Укажите дату вынесения судебного акта для расчёта срока</b>');
   }
   resultNode.innerHTML = `<div class="general-appeal-result-structured">${lines.map(x => `<p>${x}</p>`).join('')}${warnings.map(w => `<p class="danger">${escapeHtml(w)}</p>`).join('')}</div>`;
 }
 
 function calculateAppealDeadlineFromAppealEvent(item = {}) {
-  const appealKind = normalizeAppealKind(item.appeal_kind || item.title || 'Апелляция');
+  const appealTypeCode = normalizeAppealTypeCode(item.appeal_type_code || item.appealKind || item.kind_code, item.appeal_kind || item.title || 'Апелляция');
+  const appealKind = normalizeAppealKind(appealTypeCode);
   if (appealKind === 'Жалоба в Конституционный суд РФ') return { dateIso: '', dateRu: '', rule: 'Конституционный суд РФ: срок законом прямо не рассчитывается' };
   const start = ruDateToDate(item.event_date || item.date);
   if (!start) return null;
   const processKind = item.process_kind || 'ГПК';
-  const actType = item.act_type || 'Итоговое решение';
+  const actType = normalizeAppealActType(item.act_type || DEFAULT_APPEAL_ACT_TYPE);
   const startDate = addDays(start, 1);
   let deadline, period, explanation;
-  if (actType === 'Судебный приказ') {
+  if (appealTypeCode === 'cassation_transfer_refusal') {
+    deadline = addMonths(start, 3);
+    period = '3 календарных месяца';
+    explanation = 'Срок по жалобе на определение об отказе в передаче КЖ исчисляется с календарного дня, следующего за датой изготовления определения в окончательной форме. Предварительное окончание: T0 + 3 календарных месяца; если последний день нерабочий, срок переносится на ближайший рабочий день.';
+  } else if (actType === 'Судебный приказ') {
     const days = processKind === 'КАС' ? 20 : 10;
     deadline = addDays(startDate, days - 1);
     period = `${days} дней`;
@@ -4527,17 +5131,17 @@ function calculateAppealDeadlineFromAppealEvent(item = {}) {
     deadline = addDays(startDate, 14);
     period = '15 дней';
     explanation = `Частная жалоба на промежуточное определение: 15 дней. Вид определения: ${item.interim_type || 'не выбран'}.`;
-  } else if (appealKind === 'Апелляция') {
-    deadline = addMonths(startDate, 1);
+  } else if (appealTypeCode === 'appeal') {
+    deadline = addMonths(start, 1);
     period = '1 месяц';
     explanation = `${courtExplanation(processKind, appealKind)} Срок течёт со следующего календарного дня.`;
-  } else if (appealKind === 'Кассация') {
+  } else if (appealTypeCode === 'cassation') {
     const months = processKind === 'АПК' ? 2 : (processKind === 'КАС' ? 6 : (processKind === 'УПК' ? 6 : 3));
-    deadline = addMonths(startDate, months);
+    deadline = addMonths(start, months);
     period = `${months} мес.`;
     explanation = `${courtExplanation(processKind, appealKind)} Срок течёт со следующего календарного дня.`;
-  } else if (appealKind === 'Кассация в Верховный суд РФ') {
-    deadline = addMonths(startDate, 3);
+  } else if (appealTypeCode === 'cassation_supreme_court') {
+    deadline = addMonths(start, 3);
     period = '3 мес.';
     explanation = `${courtExplanation(processKind, appealKind)} Срок течёт со следующего календарного дня.`;
   } else return null;
@@ -4560,15 +5164,6 @@ function courtExplanation(processKind, appealKind) {
 function isWeekend(date) { const day = date.getDay(); return day === 0 || day === 6; }
 
 function handleGeneralAppealActionClick(event) {
-  const calc = event.target.closest('[data-general-calc-row]');
-  if (calc) {
-    event.preventDefault();
-    event.stopPropagation();
-    renderAppealRowResult(calc.closest('[data-general-appeal-row]'));
-    renderAppealSuggestions(true);
-    return true;
-  }
-
   const print = event.target.closest('[data-general-print-row]');
   if (print) {
     event.preventDefault();
@@ -4593,7 +5188,7 @@ function printAppealRowResult(row) {
   const html = row?.querySelector('[data-general-appeal-row-result]')?.innerHTML || 'Нет результата для печати';
   const win = window.open('', '_blank');
   if (!win) {
-    alert('Окно печати заблокировано. Разрешите всплывающие окна и повторите печать.');
+    showGeneralAlert('Окно печати заблокировано. Разрешите всплывающие окна и повторите печать.', { title: 'Печать' });
     return;
   }
 
@@ -4606,7 +5201,7 @@ function printAppealRowResult(row) {
 function showRestoreDeadlineTemplate(row) {
   const data = getAppealRowData(row);
   const result = calculateAppealDeadlineFromAppealEvent(data);
-  alert(`Заявление о восстановлении срока\n\nПрошу восстановить процессуальный срок по делу.\nВид обжалования: ${data.appeal_kind}.\nДата судебного акта/получения: ${data.event_date || 'не указана'}.\nПоследний день подачи: ${result?.dateRu || 'не рассчитан'}.\n\nУкажите уважительные причины пропуска и приложите подтверждающие документы.`);
+  showGeneralAlert(`Заявление о восстановлении срока\n\nПрошу восстановить процессуальный срок по делу.\nВид обжалования: ${data.appeal_kind}.\nДата судебного акта/получения: ${data.event_date || 'не указана'}.\nПоследний день подачи: ${result?.dateRu || 'не рассчитан'}.\n\nУкажите уважительные причины пропуска и приложите подтверждающие документы.`, { title: 'Калькулятор сроков' });
 }
 
 /* ===== USER REQUEST FIX: simplified appeal calculator fields, 2026-06-06 ===== */
@@ -4625,8 +5220,13 @@ function makeGeneralCaseCalendarDeadlineDescription(savedCase = {}, data = {}) {
 function isGeneralAutoCalendarTask(task = {}) {
   const desc = String(task.description || task.desc || '');
   const assignment = String(task.assignment || '');
-  return desc.startsWith('[Авто общего перечня]')
+  const meta = parseTaskMetadata(task);
+  return meta.source === 'general_case_appeal'
+    || desc.startsWith('[Авто общего перечня]')
     || desc.startsWith('Последний день подачи жалобы по делу №')
+    || desc.startsWith('Последний день подачи апелляционной жалобы')
+    || desc.startsWith('Последний день подачи кассационной жалобы')
+    || desc.startsWith('Последний день подачи жалобы на определение об отказе')
     || assignment.includes('[Авто общего перечня]');
 }
 
@@ -4636,14 +5236,18 @@ syncGeneralCaseAutoTasks = async function(savedCase, data, previousRow = null) {
     Number(task.general_case_id) === Number(savedCase.id) && isGeneralAutoCalendarTask(task)
   );
 
-  for (const task of existingAutoTasks) {
-    try { await dbApi.deleteCalendarTask(task.id); } catch {}
-  }
-
   const tasks = buildGeneralCaseAutoTasks(savedCase, data);
+  const existingByKey = new Map();
+  for (const task of existingAutoTasks) {
+    const meta = parseTaskMetadata(task);
+    if (meta.source === 'general_case_appeal' && meta.appealRowId) existingByKey.set(`appeal:${meta.appealRowId}`, task);
+  }
+  const usedTaskIds = new Set();
   for (const task of tasks) {
     try {
-      await dbApi.createCalendarTask({
+      const key = task.metadata?.source === 'general_case_appeal' && task.metadata?.appealRowId ? `appeal:${task.metadata.appealRowId}` : '';
+      const existing = key ? existingByKey.get(key) : null;
+      const payload = {
         date: task.dateIso,
         user: task.user,
         type: task.type,
@@ -4652,14 +5256,26 @@ syncGeneralCaseAutoTasks = async function(savedCase, data, previousRow = null) {
         court: data.court || savedCase.court || '',
         subject: data.claim_subject || savedCase.claim_subject || '',
         assignment: task.assignment,
+        metadata: task.metadata || {},
         general_case_id: savedCase.id
-      });
+      };
+      if (existing?.id) {
+        usedTaskIds.add(Number(existing.id));
+        await dbApi.updateCalendarTask(existing.id, payload);
+      } else {
+        const created = await dbApi.createCalendarTask(payload);
+        if (created?.id) usedTaskIds.add(Number(created.id));
+      }
     } catch (error) {
       console.warn('Не удалось создать автозадачу', error);
     }
   }
+  for (const task of existingAutoTasks) {
+    if (usedTaskIds.has(Number(task.id))) continue;
+    try { await dbApi.deleteCalendarTask(task.id); } catch {}
+  }
 
-  if (tasks.length) showNotification(`Автоматически добавлено задач в план/календарь: ${tasks.length}`);
+  if (tasks.length) showNotification(`Автоматические задачи плана/календаря синхронизированы: ${tasks.length}`);
 };
 
 buildGeneralCaseAutoTasks = function(savedCase, data, { preview = false } = {}) {
@@ -4690,31 +5306,31 @@ buildGeneralCaseAutoTasks = function(savedCase, data, { preview = false } = {}) 
 };
 
 renderAppealRow = function(row = {}) {
+  row = normalizeAppealRowData(row);
   const processKind = row.process_kind || 'ГПК';
   const actInstance = row.act_instance || 'Первая инстанция';
-  const appealKind = normalizeAppealKind(row.appeal_kind || 'Апелляция');
-  const actType = row.act_type || 'Итоговое решение';
+  const appealTypeCode = normalizeAppealTypeCode(row.appeal_type_code, row.appeal_kind);
+  const appealKind = getAppealTypeLabel(appealTypeCode, row.appeal_kind);
+  const actType = normalizeAppealActType(row.act_type || DEFAULT_APPEAL_ACT_TYPE);
   const eventDate = row.event_date || row.date || '';
   const late = row.late_motivated_received || 'Нет';
-  const supremeCassationExists = row.supreme_cassation_exists || 'Да';
   const isDebtor = row.is_debtor || 'Да';
   const interimType = row.interim_type || '';
   const submitted = Boolean(row.submitted);
   const note = row.note || '';
-  return `<div class="general-appeal-row general-appeal-event-row ${submitted ? 'is-submitted' : ''}" data-general-appeal-row>
+  return `<div class="general-appeal-row general-appeal-event-row ${submitted ? 'is-submitted' : ''}" data-general-appeal-row data-appeal-row-id="${escapeAttr(row.appeal_row_id)}" data-appeal-type-code="${escapeAttr(appealTypeCode)}" data-submitted="${submitted ? 'true' : 'false'}">
     <label><span>Вид производства</span><select data-general-appeal-control data-general-appeal-process required>${option('ГПК','Гражданский процесс (ГПК РФ)',processKind)}${option('АПК','Арбитражный процесс (АПК РФ)',processKind)}${option('КАС','Административное судопроизводство (КАС РФ)',processKind)}${option('УПК','Уголовный процесс (УПК РФ)',processKind)}</select></label>
     <label><span>Инстанция, вынесшая акт</span><select data-general-appeal-control data-general-appeal-instance required>${option('Первая инстанция','Первая инстанция',actInstance)}${option('Апелляционная инстанция','Апелляционная инстанция',actInstance)}${option('Кассационная инстанция','Кассационная инстанция',actInstance)}</select></label>
-    <label><span>Вид обжалования</span><select data-general-appeal-control data-general-appeal-kind required>${option('Апелляция','Апелляция',appealKind)}${option('Кассация','Кассация',appealKind)}${option('Кассация в Верховный суд РФ','Кассация (ВС РФ)',appealKind)}${option('Жалоба в Конституционный суд РФ','Конституционный суд РФ',appealKind)}</select></label>
-    <label data-general-act-type-wrap><span>Тип судебного акта</span><select data-general-appeal-control data-general-appeal-act-type>${option('Итоговое решение','Итоговое решение',actType)}${option('Судебный приказ','Судебный приказ',actType)}${option('Заочное решение','Заочное решение',actType)}${option('Определение (промежуточное)','Определение (промежуточное)',actType)}</select></label>
+    <label><span>Вид обжалования</span><select data-general-appeal-control data-general-appeal-kind required>${renderAppealTypeOptions(appealTypeCode, appealKind)}</select></label>
+    <label data-general-act-type-wrap><span>Тип судебного акта</span><select data-general-appeal-control data-general-appeal-act-type>${renderAppealActTypeOptions(actType)}</select></label>
     <label class="general-appeal-late-field" data-general-appeal-late-wrap ${appealKind === 'Апелляция' ? '' : 'hidden'}><span>Акт получен с нарушением срока изготовления мотивированной части?</span><select data-general-appeal-control data-general-appeal-late>${option('Нет','Нет',late)}${option('Да','Да',late)}</select></label>
-    <label data-general-supreme-cassation-wrap ${appealKind === 'Кассация в Верховный суд РФ' ? '' : 'hidden'}><span>Было ли вынесено определение кассационного суда?</span><select data-general-appeal-control data-general-supreme-cassation>${option('Да','Да',supremeCassationExists)}${option('Нет','Нет',supremeCassationExists)}</select></label>
     <label data-general-debtor-wrap ${actType === 'Судебный приказ' ? '' : 'hidden'}><span>Вы являетесь должником?</span><select data-general-appeal-control data-general-is-debtor>${option('Да','Да',isDebtor)}${option('Нет','Нет',isDebtor)}</select></label>
     <label data-general-interim-type-wrap ${actType === 'Определение (промежуточное)' ? '' : 'hidden'}><span>Вид определения</span><select data-general-appeal-control data-general-interim-type>${option('','Не выбрано',interimType)}${option('Определение о возвращении искового заявления','Определение о возвращении искового заявления',interimType)}${option('Определение об отказе в принятии искового заявления','Определение об отказе в принятии искового заявления',interimType)}${option('Определение об оставлении искового заявления без движения','Определение об оставлении искового заявления без движения',interimType)}${option('Определение об отказе в обеспечении иска','Определение об отказе в обеспечении иска',interimType)}${option('Определение о приостановлении производства по делу','Определение о приостановлении производства по делу',interimType)}${option('Определение о прекращении производства по делу','Определение о прекращении производства по делу',interimType)}${option('Определение о передаче дела по подсудности','Определение о передаче дела по подсудности',interimType)}${option('Определение о наложении судебного штрафа','Определение о наложении судебного штрафа',interimType)}${option('Определение об отказе в утверждении мирового соглашения','Определение об отказе в утверждении мирового соглашения',interimType)}</select></label>
-    <label><span data-general-appeal-date-label>${appealDateLabelFull(appealKind, actType)}</span><input data-general-appeal-date data-ru-date value="${escapeAttr(eventDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label>
+    <label class="general-appeal-date-field"><span data-general-appeal-date-label>${appealDateLabelFull(appealKind, actType)}</span><input data-general-appeal-date data-ru-date value="${escapeAttr(eventDate)}" placeholder="ДД.ММ.ГГГГ" autocomplete="off" inputmode="numeric" maxlength="10"></label>
     <button class="btn small" data-general-appeal-remove type="button" title="Удалить событие">−</button>
     <div class="general-appeal-event-result" data-general-appeal-row-result></div>
-    <div class="general-appeal-actions"><button class="btn small primary" data-general-calc-row type="button">Рассчитать срок</button><button class="btn small" data-general-print-row type="button">Распечатать результат</button><button class="btn small" data-general-restore-template type="button">Сформировать заявление о восстановлении срока</button></div>
-    <div class="general-appeal-submitted-line"><button class="general-appeal-check ${submitted ? 'checked' : ''}" data-general-appeal-submitted type="button">${submitted ? '✓' : ''}</button><span class="general-appeal-submitted-text" ${submitted ? '' : 'hidden'}>Жалоба подана</span></div>
+    <div class="general-appeal-actions"><button class="btn small" data-general-print-row type="button">Распечатать результат</button><button class="btn small" data-general-restore-template type="button">Сформировать заявление о восстановлении срока</button></div>
+    <button class="general-appeal-submitted-button general-appeal-submitted-line" data-general-appeal-submitted type="button" aria-pressed="${submitted ? 'true' : 'false'}" title="${submitted ? 'Снять отметку о подаче жалобы' : 'Отметить жалобу как поданную'}"><span class="general-appeal-check ${submitted ? 'checked' : ''}" aria-hidden="true">${submitted ? '✓' : ''}</span><span class="general-appeal-submitted-text">Жалоба подана</span></button>
     <div class="general-appeal-after-submit" data-general-appeal-after-submit ${submitted ? '' : 'hidden'}><label><span>Примечание</span><textarea data-general-appeal-note rows="2">${escapeHtml(note)}</textarea></label></div>
   </div>`;
 };
@@ -4723,7 +5339,8 @@ renderAppealRowResult = function(rowNode) {
   if (!rowNode) return;
   const data = getAppealRowData(rowNode);
   const resultNode = rowNode.querySelector('[data-general-appeal-row-result]');
-  const kind = normalizeAppealKind(data.appeal_kind);
+  const code = normalizeAppealTypeCode(data.appeal_type_code, data.appeal_kind);
+  const kind = normalizeAppealKind(code);
   const actType = data.act_type;
   const setHidden = (sel, hidden) => {
     const el = rowNode.querySelector(sel);
@@ -4734,27 +5351,40 @@ renderAppealRowResult = function(rowNode) {
   };
 
   setHidden('[data-general-act-type-wrap]', data.act_instance !== 'Первая инстанция');
-  setHidden('[data-general-appeal-late-wrap]', kind !== 'Апелляция');
-  setHidden('[data-general-supreme-cassation-wrap]', kind !== 'Кассация в Верховный суд РФ');
+  setHidden('[data-general-appeal-late-wrap]', code !== 'appeal');
   setHidden('[data-general-debtor-wrap]', actType !== 'Судебный приказ');
   setHidden('[data-general-interim-type-wrap]', actType !== 'Определение (промежуточное)');
+  if (rowNode.dataset.appealTypeCode && rowNode.dataset.appealTypeCode !== code && code === 'cassation_transfer_refusal') {
+    const dateInput = rowNode.querySelector('[data-general-appeal-date]');
+    if (dateInput) dateInput.value = '';
+  }
+  rowNode.dataset.appealTypeCode = code;
 
   const dateLabel = rowNode.querySelector('[data-general-appeal-date-label]');
-  if (dateLabel) dateLabel.textContent = appealDateLabelFull(kind, actType);
+  if (dateLabel) dateLabel.textContent = appealDateLabelFull(code, actType);
 
   const check = rowNode.querySelector('[data-general-appeal-submitted]');
   const submittedText = rowNode.querySelector('.general-appeal-submitted-text');
   const afterSubmit = rowNode.querySelector('[data-general-appeal-after-submit]');
-  if (check) { check.classList.toggle('checked', data.submitted); check.textContent = data.submitted ? '✓' : ''; }
-  if (submittedText) submittedText.hidden = !data.submitted;
+  const checkMark = rowNode.querySelector('.general-appeal-check');
+  rowNode.dataset.submitted = data.submitted ? 'true' : 'false';
+  rowNode.classList.toggle('is-submitted', data.submitted);
+  if (check) {
+    check.setAttribute('aria-pressed', data.submitted ? 'true' : 'false');
+    check.title = data.submitted ? 'Снять отметку о подаче жалобы' : 'Отметить жалобу как поданную';
+  }
+  if (checkMark) {
+    checkMark.classList.toggle('checked', data.submitted);
+    checkMark.textContent = data.submitted ? '✓' : '';
+  }
+  if (submittedText) submittedText.hidden = false;
   if (afterSubmit) afterSubmit.hidden = !data.submitted;
   if (!resultNode) return;
 
-  const result = calculateAppealDeadlineFromAppealEvent({ ...data, appeal_kind: kind });
+  const result = calculateAppealDeadlineFromAppealEvent({ ...data, appeal_type_code: code, appeal_kind: getAppealTypeLabel(code, data.appeal_kind) });
   const lines = [];
   const warnings = [];
-  if (kind === 'Апелляция' && data.late_motivated_received === 'Да') warnings.push('Акт получен с нарушением срока изготовления мотивированной части. Срок может быть восстановлен судом при наличии уважительных причин. Рекомендуется приложить ходатайство о восстановлении срока.');
-  if (kind === 'Кассация в Верховный суд РФ' && data.supreme_cassation_exists === 'Нет') warnings.push('Для обращения в Верховный Суд РФ необходимо сначала получить определение кассационного суда общей юрисдикции или арбитражного суда округа.');
+  if (code === 'appeal' && data.late_motivated_received === 'Да') warnings.push('Акт получен с нарушением срока изготовления мотивированной части. Срок может быть восстановлен судом при наличии уважительных причин. Рекомендуется приложить ходатайство о восстановлении срока.');
   if (kind === 'Жалоба в Конституционный суд РФ') {
     resultNode.innerHTML = `<p>${escapeHtml(getAppealKindExplanation(data.process_kind, kind))}</p><ul><li>Пройдена ли апелляция?</li><li>Пройдена ли кассация в суд общей юрисдикции или арбитражный суд округа?</li><li>Пройдена ли кассация в Верховный Суд РФ?</li><li>Обжалуется ли конституционность закона, а не фактические обстоятельства дела?</li></ul>`;
     return;
@@ -4762,8 +5392,8 @@ renderAppealRowResult = function(rowNode) {
   if (result?.dateRu) {
     const expired = result.dateIso && isDeadlineExpired(result.dateIso);
     lines.push(`<b>Вид производства:</b> ${escapeHtml(data.process_kind)}`);
-    lines.push(`<b>Вид обжалования:</b> ${escapeHtml(kind)}`);
-    lines.push(`<b>${escapeHtml(appealDateLabelFull(kind, actType))}:</b> ${escapeHtml(data.event_date)}`);
+    lines.push(`<b>Вид обжалования:</b> ${escapeHtml(getAppealTypeLabel(code, data.appeal_kind))}`);
+    lines.push(`<b>${escapeHtml(appealDateLabelFull(code, actType))}:</b> ${escapeHtml(data.event_date)}`);
     lines.push(`<b>Начало срока:</b> ${escapeHtml(result.startRu || '')}`);
     lines.push(`<b>Срок подачи:</b> ${escapeHtml(result.period || '')}`);
     lines.push(`<b>Последний день подачи:</b> ${escapeHtml(result.dateRu)}`);
@@ -4802,12 +5432,22 @@ if (!window.__generalCasesExternalOpenInstalled) {
   window.addEventListener('general-cases:open-case', async event => {
     const id = Number(event.detail?.id || event.detail?.general_case_id || 0);
     const sourceView = event.detail?.sourceView || event.detail?.returnView || '';
+    const appealRowId = String(event.detail?.appealRowId || event.detail?.appeal_row_id || '').trim();
+    const documentId = String(event.detail?.documentId || event.detail?.document_id || '').trim();
+    const approvalRequestId = Number(event.detail?.approvalRequestId || event.detail?.approval_request_id || 0);
+    const tab = String(event.detail?.tab || '').trim();
     if (!id) return;
     try {
       state.archived = false;
       syncArchiveToggleButton();
       await loadGeneralCases();
       await openGeneralCaseById(id, null, { sourceView });
+      if (appealRowId) setTimeout(() => focusAppealRowById(appealRowId), 80);
+      if (tab === 'documents' || documentId || approvalRequestId) {
+        await refreshReviewApprovals(id);
+        if (documentId) focusDocumentById(documentId);
+        else focusApprovalRequest(approvalRequestId);
+      }
     } catch (error) {
       console.error('Не удалось открыть дело из календаря:', error);
       showNotification('Не удалось открыть связанное дело из общего перечня', 'error');
@@ -4865,24 +5505,47 @@ function makeGeneralCaseAutoTaskBase(savedCase = {}, data = {}) {
   return `[Авто общего перечня]\nДело № ${caseNo}\n№ дела в суде: ${courtNo}\nИстец: ${plaintiff}\nОтветчик: ${defendant}\nПредмет: ${claimSubject}${data.claim_address || savedCase.claim_address ? '\nАдрес: ' + (data.claim_address || savedCase.claim_address || '') : ''}`.trim();
 }
 
+function makeAppealDeadlineTaskTitle(savedCase = {}, data = {}, item = {}) {
+  const caseNumber = String(data.court_no || savedCase.court_no || '').trim() || 'без номера';
+  const code = normalizeAppealTypeCode(item.appeal_type_code, item.appeal_kind || item.title);
+  const appealLabel = getAppealTypeLabel(code, item.appeal_kind || item.title || '');
+  return `Последний день подачи жалобы (${appealLabel}) по делу № ${caseNumber}`;
+}
+
+function parseTaskMetadata(task = {}) {
+  try {
+    const raw = task.metadata_json || task.metadata || '{}';
+    return typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
+  } catch {
+    return {};
+  }
+}
+
 buildGeneralCaseAutoTasks = function(savedCase, data, { preview = false } = {}) {
   const tasks = [];
   const user = data.executor || getCurrentUserName() || 'Администратор';
   const caseNo = data.case_no || savedCase.case_no || '';
   const baseAssignment = makeGeneralCaseAutoTaskBase(savedCase, data);
-  const appealDesc = makeGeneralCaseCalendarDeadlineDescription(savedCase, data);
 
-  for (const item of parseAppeals(data.appeals_json)) {
+  for (const rawItem of parseAppeals(data.appeals_json)) {
+    const item = normalizeAppealRowData(rawItem);
     if (isGeneralHearingEventRow(item)) continue;
     const result = calculateAppealDeadlineFromAppealEvent(item);
     if (!result?.dateIso) continue;
+    const appealTypeCode = normalizeAppealTypeCode(item.appeal_type_code, item.appeal_kind);
     tasks.push({
       dateIso: result.dateIso,
       dateRu: result.dateRu,
       user,
       type: 'поручение',
-      desc: appealDesc,
-      assignment: `${baseAssignment}\nВид производства: ${item.process_kind || 'ГПК'}\nИнстанция: ${item.act_instance || ''}\nВид обжалования: ${item.appeal_kind || ''}\nДата акта/мотивировки: ${item.event_date || item.date || ''}\nРасчёт: ${result.rule || result.explanation || ''}${item.submitted ? '\nСтатус: жалоба подана' : ''}${item.note ? '\nПримечание: ' + item.note : ''}`
+      desc: makeAppealDeadlineTaskTitle(savedCase, data, item),
+      assignment: `${baseAssignment}\nВид производства: ${item.process_kind || 'ГПК'}\nИнстанция: ${item.act_instance || ''}\nВид обжалования: ${item.appeal_kind || ''}\nДата акта/мотивировки: ${item.event_date || item.date || ''}\nРасчёт: ${result.rule || result.explanation || ''}${item.submitted ? '\nСтатус: жалоба подана' : ''}${item.note ? '\nПримечание: ' + item.note : ''}`,
+      metadata: {
+        source: 'general_case_appeal',
+        caseId: Number(savedCase.id || data.id || 0),
+        appealRowId: item.appeal_row_id,
+        appealTypeCode
+      }
     });
   }
 
@@ -4940,11 +5603,12 @@ syncGeneralCaseAutoTasks = async function(savedCase, data, previousRow = null) {
     const details = dependentTasks
       .map(task => `• ${String(task.description || task.desc || 'Задача').replace('[Авто общего перечня] ', '')}`)
       .join('\n');
-    const ok = confirm(
+    const ok = await showGeneralConfirm(
       `Дата предварительного заседания изменена с ${oldText} на ${newText}.\n` +
       `Обнаружены зависимые задачи (${dependentTasks.length}).\n${details}\n\n` +
       'Пересчитать сроки их исполнения автоматически?\n\n' +
-      'При пересчёте система берёт новую дату заседания, отнимает период задачи и переносит дедлайн на ближайший рабочий день, если он выпал на выходной.'
+      'При пересчёте система берёт новую дату заседания, отнимает период задачи и переносит дедлайн на ближайший рабочий день, если он выпал на выходной.',
+      { title: 'Пересчёт сроков', okText: 'Пересчитать' }
     );
     if (!ok) return;
   }

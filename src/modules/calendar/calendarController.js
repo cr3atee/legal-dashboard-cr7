@@ -1,4 +1,4 @@
-import { dbApi } from '../../api/dbApi.js';
+﻿import { dbApi } from '../../api/dbApi.js';
 import { showNotification } from '../../layout/notifications.js';
 import { getAuthSession, getCurrentUserName, isCurrentUserAdmin } from '../../auth/session.js';
 
@@ -19,47 +19,47 @@ const MONTHS = [
 ];
 
 const TASK_COLORS = {
-  судебное_заседание: '#fff4e6',
-  процессуальный_срок: '#fff0f2',
-  поручение: '#fff0f2',
-  отзыв: '#eaf0ff',
-  рабочая_заметка: '#f1f5ff',
-  личное: '#eaf8f3',
-  иное: '#e8f5f8',
-  делегировано: '#edf0f4'
+  "судебное_заседание": '#fff4e6',
+  "процессуальный_срок": '#fff0f2',
+  "поручение": '#fff0f2',
+  "отзыв": '#eaf0ff',
+  "рабочая_заметка": '#f1f5ff',
+  "личное": '#eaf8f3',
+  "иное": '#e8f5f8',
+  "делегировано": '#edf0f4'
 };
 
 const TASK_ICONS = {
-  судебное_заседание: '⚖️',
-  процессуальный_срок: '⏰',
-  отзыв: '✎',
-  поручение: '!',
-  рабочая_заметка: '📝',
-  личное: '●',
-  иное: '◆',
-  делегировано: '↪'
+  "судебное_заседание": '⚖️',
+  "процессуальный_срок": '⏰',
+  "отзыв": '✎',
+  "поручение": '!',
+  "рабочая_заметка": '📝',
+  "личное": '●',
+  "иное": '◆',
+  "делегировано": '↪'
 };
 
 const TASK_ICON_COLORS = {
-  судебное_заседание: '#d77a14',
-  процессуальный_срок: '#d54654',
-  отзыв: '#2557d6',
-  поручение: '#d54654',
-  рабочая_заметка: '#2557d6',
-  личное: '#1d9b72',
-  иное: '#157ea1',
-  делегировано: '#687087'
+  "судебное_заседание": '#d77a14',
+  "процессуальный_срок": '#d54654',
+  "отзыв": '#2557d6',
+  "поручение": '#d54654',
+  "рабочая_заметка": '#2557d6',
+  "личное": '#1d9b72',
+  "иное": '#157ea1',
+  "делегировано": '#687087'
 };
 
 const TASK_LABELS = {
-  судебное_заседание: 'Судебное заседание',
-  процессуальный_срок: 'Процессуальный срок',
-  отзыв: 'Отзыв/жалоба',
-  поручение: 'Контрольное поручение',
-  рабочая_заметка: 'Рабочая заметка',
-  личное: 'Личный план',
-  иное: 'Иное',
-  делегировано: 'Делегировано'
+  "судебное_заседание": 'Судебное заседание',
+  "процессуальный_срок": 'Процессуальный срок',
+  "отзыв": 'Отзыв/жалоба',
+  "поручение": 'Контрольное поручение',
+  "рабочая_заметка": 'Рабочая заметка',
+  "личное": 'Личный план',
+  "иное": 'Иное',
+  "делегировано": 'Делегировано'
 };
 
 const TASK_TYPE_KEYS = Object.keys(TASK_LABELS);
@@ -96,6 +96,8 @@ let state = {
   selectedDate: toIsoDate(new Date()),
   users: ['Администратор'],
   selectedUser: 'Администратор',
+  selectedExecutorId: 0,
+  calendarExecutors: [],
   tasks: [],
   tasksByDate: new Map(),
   selectedTask: null,
@@ -121,8 +123,51 @@ let state = {
   caseLinkTargetTaskId: 0,
   caseLinkForForm: false,
   caseLinkResults: [],
-  confirmResolver: null
+  confirmResolver: null,
+  executionMode: false
 };
+
+const CALENDAR_EXECUTOR_STORAGE_PREFIX = 'legal-dashboard-calendar-executor-v1';
+
+function canChooseCalendarExecutor() {
+  return Number(getAuthSession()?.role_level || 0) >= 2;
+}
+
+function getCalendarExecutorStorageKey() {
+  const session = getAuthSession();
+  const token = session?.id || session?.full_name || getCurrentUserName() || 'default';
+  return `${CALENDAR_EXECUTOR_STORAGE_PREFIX}:${token}`;
+}
+
+function loadCalendarExecutorSelection() {
+  try {
+    return Number(localStorage.getItem(getCalendarExecutorStorageKey()) || 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveCalendarExecutorSelection(id) {
+  try {
+    localStorage.setItem(getCalendarExecutorStorageKey(), String(Number(id) || 0));
+  } catch {}
+}
+
+function getSelectedCalendarExecutor() {
+  return state.calendarExecutors.find(user => Number(user.id) === Number(state.selectedExecutorId)) || null;
+}
+
+function getCalendarViewLabel() {
+  const currentUser = getCurrentUserName() || state.selectedUser || 'Администратор';
+  const executor = getSelectedCalendarExecutor();
+  return executor?.full_name ? `${currentUser} + ${executor.full_name}` : currentUser;
+}
+
+function getTaskExecutorLabel(task) {
+  const owner = getTaskUser(task);
+  const currentUser = getCurrentUserName();
+  return owner && currentUser && owner !== currentUser ? owner : '';
+}
 
 export function initCalendarPage() {
   if (state.initialized) return;
@@ -153,6 +198,12 @@ export function initCalendarPage() {
     if (event.target.closest('[data-calendar-collapse-toggle]')) toggleCalendarCollapsed();
     if (event.target.closest('[data-calendar-week-prev]')) changeWeek(-1);
     if (event.target.closest('[data-calendar-week-next]')) changeWeek(1);
+    if (event.target.closest('[data-calendar-execution-mode]')) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleExecutionMode();
+      return;
+    }
 
     const planAdd = event.target.closest('[data-calendar-plan-add]');
     if (planAdd) {
@@ -230,6 +281,10 @@ export function initCalendarPage() {
     if (weekTask && !event.target.closest('[data-calendar-plan-link]')) {
       event.preventDefault();
       event.stopPropagation();
+      if (state.executionMode) {
+        toggleTaskDone(Number(weekTask.dataset.calendarWeekTaskId));
+        return;
+      }
       openCalendarTaskEditor(Number(weekTask.dataset.calendarWeekTaskId));
       return;
     }
@@ -262,7 +317,8 @@ export function initCalendarPage() {
 
   document.addEventListener('change', event => {
     if (event.target.matches('[data-calendar-user]')) {
-      state.selectedUser = event.target.value || state.users[0] || 'Администратор';
+      state.selectedExecutorId = Number(event.target.value || 0) || 0;
+      saveCalendarExecutorSelection(state.selectedExecutorId);
       loadCalendarTasks();
     }
 
@@ -297,6 +353,10 @@ export function initCalendarPage() {
   });
 
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && state.executionMode) {
+      setExecutionMode(false);
+      return;
+    }
     if (event.key === 'Enter' && event.target.matches('[data-calendar-case-link-query]')) {
       event.preventDefault();
       searchCalendarCaseLinkDialog();
@@ -307,6 +367,10 @@ export function initCalendarPage() {
 document.addEventListener('dragstart', event => {
   const task = event.target.closest('[data-calendar-week-task-id]');
   if (!task) return;
+  if (state.executionMode) {
+    event.preventDefault();
+    return;
+  }
   event.dataTransfer.setData('text/plain', task.dataset.calendarWeekTaskId);
   event.dataTransfer.effectAllowed = 'move';
   state.draggingWeekTaskId = task.dataset.calendarWeekTaskId;
@@ -478,6 +542,10 @@ window.addEventListener('calendar:edit-task', event => {
   openTaskForm(task);
 });
 
+window.addEventListener('app:view-changed', event => {
+  if (event.detail?.viewId !== 'calendar') setExecutionMode(false);
+});
+
 
 
   bootstrapCalendar();
@@ -494,13 +562,7 @@ async function bootstrapCalendar() {
 
 async function loadUsers() {
   const currentUserName = getCurrentUserName();
-  const isAdmin = isCurrentUserAdmin();
-
-  if (!isAdmin) {
-    state.users = [currentUserName];
-    state.selectedUser = currentUserName;
-    return;
-  }
+  state.selectedUser = currentUserName;
 
   try {
     const users = await dbApi.getUsers();
@@ -509,11 +571,21 @@ async function loadUsers() {
     state.users = [currentUserName || 'Администратор'];
   }
 
-  state.selectedUser = currentUserName || state.users[0] || 'Администратор';
-
-  if (!state.users.includes(state.selectedUser)) {
-    state.users.unshift(state.selectedUser);
+  if (!canChooseCalendarExecutor()) {
+    state.calendarExecutors = [];
+    state.selectedExecutorId = 0;
+    return;
   }
+
+  try {
+    const users = await dbApi.getCalendarUsers();
+    state.calendarExecutors = users.length ? users : [];
+  } catch {
+    state.calendarExecutors = [];
+  }
+
+  const stored = loadCalendarExecutorSelection();
+  state.selectedExecutorId = state.calendarExecutors.some(user => Number(user.id) === stored) ? stored : 0;
 }
 
 async function loadCourts() {
@@ -531,22 +603,24 @@ async function loadCourts() {
 
 function syncUserSelects() {
   const pageSelect = document.querySelector('[data-calendar-user]');
-  const currentUserName = getCurrentUserName();
-  const isAdmin = isCurrentUserAdmin();
+  const filterWrap = pageSelect?.closest('.calendar-user-filter');
+  const canSelect = canChooseCalendarExecutor();
 
-  if (!isAdmin) {
-    state.users = [currentUserName];
-    state.selectedUser = currentUserName;
+  if (!pageSelect) return;
+  if (filterWrap) filterWrap.hidden = !canSelect;
+  if (!canSelect) {
+    pageSelect.innerHTML = '<option value="0">Только мой календарь</option>';
+    pageSelect.value = '0';
+    state.selectedExecutorId = 0;
+    return;
   }
 
-  const options = state.users.map(user => '<option value="' + escapeHtml(user) + '">' + escapeHtml(user) + '</option>').join('');
+  const options = ['<option value="0">Только мой календарь</option>']
+    .concat(state.calendarExecutors.map(user => `<option value="${escapeHtml(String(user.id))}">${escapeHtml(user.full_name)}</option>`))
+    .join('');
 
-  if (pageSelect) {
-    pageSelect.innerHTML = options;
-    pageSelect.value = state.selectedUser;
-    pageSelect.disabled = !isAdmin;
-    pageSelect.closest('.calendar-user-filter')?.classList.toggle('locked', !isAdmin);
-  }
+  pageSelect.innerHTML = options;
+  pageSelect.value = String(state.selectedExecutorId || 0);
 }
 
 async function loadCalendarTasks() {
@@ -555,11 +629,38 @@ async function loadCalendarTasks() {
 
   try {
     const { start, end } = getVisibleDateRange();
-    state.tasks = await dbApi.getCalendarTasks({
-      start,
-      end,
-      user: state.selectedUser
-    });
+    const currentUserName = getCurrentUserName() || state.selectedUser || 'Администратор';
+    const selectedExecutor = getSelectedCalendarExecutor();
+    const requests = [
+      dbApi.getCalendarTasks({
+        start,
+        end,
+        user: currentUserName
+      })
+    ];
+
+    if (selectedExecutor?.full_name) {
+      requests.push(dbApi.getCalendarTasks({
+        start,
+        end,
+        user: selectedExecutor.full_name,
+        scope: 'work'
+      }));
+    }
+
+    const results = await Promise.allSettled(requests);
+    const merged = [];
+    const seen = new Set();
+    for (const result of results) {
+      if (result.status !== 'fulfilled' || !Array.isArray(result.value)) continue;
+      for (const task of result.value) {
+        const key = String(task?.id || '');
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(task);
+      }
+    }
+    state.tasks = merged.sort((a, b) => `${getTaskDate(a)} ${getTaskTime(a)} ${a.id}`.localeCompare(`${getTaskDate(b)} ${getTaskTime(b)} ${b.id}`));
   } catch (error) {
     state.tasks = [];
     console.warn('calendar load error', error);
@@ -572,6 +673,7 @@ async function loadCalendarTasks() {
   renderWeeklyPlan();
   renderDayAndListViews();
   syncCalendarViewMode();
+  syncExecutionModeUi();
 
   window.dispatchEvent(new CustomEvent('calendar:updated', {
     detail: {
@@ -676,7 +778,7 @@ function renderSelectedTasks() {
   const list = document.querySelector('[data-calendar-task-list]');
   if (!list) return;
 
-  if (title) title.textContent = `События: ${state.selectedUser} (${formatRuDate(state.selectedDate)})`;
+  if (title) title.textContent = `События: ${getCalendarViewLabel()} (${formatRuDate(state.selectedDate)})`;
 
   const tasks = state.tasksByDate.get(state.selectedDate) || [];
 
@@ -689,6 +791,7 @@ function renderSelectedTasks() {
     const type = getTaskType(task);
     const time = getTaskTime(task);
     const note = getTaskNote(task);
+    const executorLabel = getTaskExecutorLabel(task);
     return `
       <article class="calendar-task-card ${isTaskDelegated(task) ? 'is-delegated' : ''}" data-calendar-task-id="${task.id}" style="--task-bg: ${getTaskBg(task)}; --task-icon-color: ${getTaskIconColor(task)};">
         <div class="calendar-task-icon">${escapeHtml(getTaskIcon(task))}</div>
@@ -697,6 +800,7 @@ function renderSelectedTasks() {
           <span>${time ? `[${escapeHtml(time)}] · ` : ''}${escapeHtml(getTaskDisplayLabel(task))}</span>
           ${task.court && !task.is_private_masked ? `<p>${escapeHtml(task.court)}</p>` : ''}
           ${note ? `<p class="calendar-task-note">${escapeHtml(note)}</p>` : ''}
+          ${executorLabel ? `<small>Исполнитель: ${escapeHtml(executorLabel)}</small>` : ''}
           ${isTaskDelegated(task) ? `<small>Делегировано: ${escapeHtml(task.delegated_to || '')}</small>` : ''}
         </div>
       </article>
@@ -1011,7 +1115,7 @@ async function saveTask(form) {
 
     state.selectedDate = data.date;
     state.weekStartDate = getWeekRange(data.date).start;
-    state.selectedUser = data.user;
+    state.selectedUser = currentUserName;
     syncUserSelects();
     closeTaskForm();
     await loadCalendarTasks();
@@ -1386,7 +1490,27 @@ async function exportWeeklyPlan() {
 
   let rows = [];
   try {
-    rows = await dbApi.getCalendarTasks({ start, end, user: state.selectedUser });
+    const currentUserName = getCurrentUserName() || state.selectedUser || 'Администратор';
+    const selectedExecutor = getSelectedCalendarExecutor();
+    const requests = [
+      dbApi.getCalendarTasks({ start, end, user: currentUserName })
+    ];
+    if (selectedExecutor?.full_name) {
+      requests.push(dbApi.getCalendarTasks({ start, end, user: selectedExecutor.full_name, scope: 'work' }));
+    }
+    const results = await Promise.allSettled(requests);
+    const merged = [];
+    const seen = new Set();
+    for (const result of results) {
+      if (result.status !== 'fulfilled' || !Array.isArray(result.value)) continue;
+      for (const task of result.value) {
+        const key = String(task?.id || '');
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(task);
+      }
+    }
+    rows = merged.sort((a, b) => `${getTaskDate(a)} ${getTaskTime(a)} ${a.id}`.localeCompare(`${getTaskDate(b)} ${getTaskTime(b)} ${b.id}`));
   } catch (error) {
     showNotification('Не удалось получить задачи: ' + error.message, 'error');
     return;
@@ -1417,7 +1541,7 @@ async function exportWeeklyPlan() {
 </head>
 <body>
 <div class="Section1">
-  <h1>План работы: ${escapeHtml(state.selectedUser)}<br>${formatRuDate(start)} — ${formatRuDate(end)}</h1>
+  <h1>План работы: ${escapeHtml(getCalendarViewLabel())}<br>${formatRuDate(start)} — ${formatRuDate(end)}</h1>
   <h2>Поручения из совещаний</h2>
   <table>
     <thead><tr><th>Выполнено в срок</th><th>Просрочено</th><th>В работе</th></tr></thead>
@@ -1446,7 +1570,7 @@ async function exportWeeklyPlan() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `План_${state.selectedUser.replace(/\s+/g, '_')}_${formatRuDate(start).replaceAll('.', '_')}-${formatRuDate(end).replaceAll('.', '_')}.doc`;
+  a.download = `План_${getCalendarViewLabel().replace(/\s+/g, '_')}_${formatRuDate(start).replaceAll('.', '_')}-${formatRuDate(end).replaceAll('.', '_')}.doc`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1550,6 +1674,7 @@ function calendarTaskPayload(task, overrides = {}) {
     assignment: overrides.assignment ?? task?.assignment ?? '',
     note_text: overrides.note_text ?? task?.note_text ?? '',
     private_note: overrides.private_note ?? task?.private_note ?? '',
+    metadata_json: overrides.metadata_json ?? task?.metadata_json ?? JSON.stringify(overrides.metadata || task?.metadata || {}),
     delegated_to: overrides.delegated_to ?? task?.delegated_to ?? '',
     delegated_by: overrides.delegated_by ?? task?.delegated_by ?? '',
     delegation_status: overrides.delegation_status ?? task?.delegation_status ?? '',
@@ -1656,15 +1781,62 @@ function renderWeekTask(task) {
   const background = customColor || getTaskBg(task);
   const time = getTaskTime(task);
   const linked = Number(task.general_case_id || 0) > 0;
+  const done = Number(task.done || 0) === 1;
+  const draggable = !state.executionMode && !task.is_private_masked;
+  const executorLabel = getTaskExecutorLabel(task);
 
   return `
-    <article class="calendar-week-task ${isTaskDelegated(task) ? 'is-delegated' : ''}" draggable="${task.is_private_masked ? 'false' : 'true'}" data-calendar-task-id="${task.id}" data-calendar-week-task-id="${task.id}" style="--week-task-bg: ${background}; --task-icon-color: ${getTaskIconColor(task)};">
+    <article class="calendar-week-task ${isTaskDelegated(task) ? 'is-delegated' : ''} ${done ? 'is-done' : ''}" draggable="${draggable ? 'true' : 'false'}" data-calendar-task-id="${task.id}" data-calendar-week-task-id="${task.id}" style="--week-task-bg: ${background}; --task-icon-color: ${getTaskIconColor(task)};">
       <span class="calendar-week-task-time">${escapeHtml(time || '—')}</span>
       <b>${escapeHtml(getTaskDescription(task) || getTaskDisplayLabel(task))}</b>
       <small>${escapeHtml(getTaskDisplayLabel(task))}${linked || Number(task.meeting_id || 0) > 0 ? ' · связано с делом' : ''}</small>
+      ${executorLabel ? `<small>Исполнитель: ${escapeHtml(executorLabel)}</small>` : ''}
+      ${done ? '<span class="calendar-week-task-done">Исполнено</span>' : ''}
       ${getTaskNote(task) ? `<p>${escapeHtml(getTaskNote(task))}</p>` : ''}
     </article>
   `;
+}
+
+function toggleExecutionMode() {
+  setExecutionMode(!state.executionMode);
+}
+
+function setExecutionMode(active) {
+  const next = Boolean(active);
+  if (state.executionMode === next) {
+    syncExecutionModeUi();
+    return;
+  }
+  state.executionMode = next;
+  syncExecutionModeUi();
+  renderWeeklyPlan();
+}
+
+function syncExecutionModeUi() {
+  const button = document.querySelector('[data-calendar-execution-mode]');
+  const grid = document.querySelector('[data-calendar-week-plan-grid]');
+  if (button) {
+    button.classList.toggle('active', state.executionMode);
+    button.setAttribute('aria-pressed', state.executionMode ? 'true' : 'false');
+  }
+  grid?.classList.toggle('execution-mode', state.executionMode);
+}
+
+async function toggleTaskDone(taskId) {
+  const task = state.tasks.find(item => Number(item.id) === Number(taskId));
+  if (!task) return;
+  if (task.is_private_masked || (!isCurrentUserAdmin() && String(getTaskUser(task)) !== String(getCurrentUserName()))) {
+    showNotification('Нет прав для изменения этой задачи', 'error');
+    return;
+  }
+  try {
+    const nextDone = Number(task.done || 0) === 1 ? 0 : 1;
+    await dbApi.updateCalendarTask(task.id, calendarTaskPayload(task, { done: nextDone }));
+    showNotification(nextDone ? 'Задача отмечена как исполненная' : 'Отметка исполнения снята');
+    await loadCalendarTasks();
+  } catch (error) {
+    showNotification('Не удалось сохранить отметку исполнения: ' + error.message, 'error');
+  }
 }
 function changeWeek(delta) {
   const date = new Date(state.weekStartDate || state.selectedDate);
@@ -2065,9 +2237,10 @@ function renderDayAndListViews() {
 }
 
 function renderUnifiedListItem(task) {
+  const executorLabel = getTaskExecutorLabel(task);
   return `<article class="calendar-unified-list-item ${isTaskDelegated(task) ? 'is-delegated' : ''}" data-calendar-task-id="${task.id}" style="--task-bg:${getTaskBg(task)};--task-icon-color:${getTaskIconColor(task)}">
     <div class="calendar-unified-list-icon">${escapeHtml(getTaskIcon(task))}</div>
-    <div class="calendar-unified-list-main"><span>${escapeHtml(formatTaskPeriod(task))}${getTaskTime(task) ? ` · ${escapeHtml(getTaskTime(task))}` : ''}</span><b>${escapeHtml(getTaskDescription(task) || getTaskDisplayLabel(task))}</b><small>${escapeHtml(getTaskDisplayLabel(task))}</small>${getTaskNote(task) ? `<p>${escapeHtml(getTaskNote(task))}</p>` : ''}</div>
+    <div class="calendar-unified-list-main"><span>${escapeHtml(formatTaskPeriod(task))}${getTaskTime(task) ? ` · ${escapeHtml(getTaskTime(task))}` : ''}</span><b>${escapeHtml(getTaskDescription(task) || getTaskDisplayLabel(task))}</b><small>${escapeHtml(getTaskDisplayLabel(task))}</small>${executorLabel ? `<small>Исполнитель: ${escapeHtml(executorLabel)}</small>` : ''}${getTaskNote(task) ? `<p>${escapeHtml(getTaskNote(task))}</p>` : ''}</div>
   </article>`;
 }
 

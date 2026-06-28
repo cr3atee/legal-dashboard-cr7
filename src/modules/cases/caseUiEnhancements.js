@@ -8,7 +8,8 @@ const state = {
   timer: null,
   dialog: null,
   select: null,
-  categories: []
+  categories: [],
+  activeIndex: -1
 };
 
 export function initCaseUiEnhancements() {
@@ -73,7 +74,10 @@ function handleInput(event) {
     select.value = 'all';
     select.dispatchEvent(new Event('input', { bubbles: true }));
     state.bypass = false;
-    setTimeout(() => { ensureProsecutorOption(select); select.value = 'prosecutor'; }, 0);
+    setTimeout(() => {
+      ensureProsecutorOption(select);
+      select.value = 'prosecutor';
+    }, 0);
     window.dispatchEvent(new CustomEvent('general-cases:reload'));
     return;
   }
@@ -119,6 +123,7 @@ function decorate() {
   decorateMarkers();
   const dialog = document.querySelector('[data-general-dialog]');
   if (dialog) {
+    dialog.querySelectorAll('select[name="category"]').forEach(enhanceCategoryField);
     const tab = dialog.querySelector('[data-general-case-tab].is-active')?.dataset.generalCaseTab || 'info';
     dialog.classList.toggle('is-plan-tab', tab === 'plan');
     dialog.classList.toggle('is-appeal-tab', tab === 'appeal');
@@ -151,8 +156,41 @@ function decorateMarkers() {
   });
 }
 
+function enhanceCategoryField(select) {
+  if (!(select instanceof HTMLSelectElement)) return;
+  if (select.parentElement) select.parentElement.style.position = 'relative';
+  let trigger = select.parentElement?.querySelector('[data-case-category-trigger]');
+  if (!trigger) {
+    trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'case-category-trigger';
+    trigger.dataset.caseCategoryTrigger = '1';
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    select.insertAdjacentElement('afterend', trigger);
+  }
+  select.classList.add('case-category-native');
+  select.tabIndex = -1;
+  select.setAttribute('aria-hidden', 'true');
+  if (!select.dataset.caseCategoryTriggerBound) {
+    select.addEventListener('change', () => {
+      const nextTrigger = select.parentElement?.querySelector('[data-case-category-trigger]');
+      if (nextTrigger) syncCategoryTrigger(select, nextTrigger);
+    });
+    select.dataset.caseCategoryTriggerBound = '1';
+  }
+  syncCategoryTrigger(select, trigger);
+}
+
+function syncCategoryTrigger(select, trigger) {
+  const value = String(select.value || '').trim();
+  trigger.textContent = value || 'Не выбрано';
+  trigger.classList.toggle('is-empty', !value);
+  trigger.setAttribute('aria-label', value ? `Категория спора: ${value}` : 'Категория спора: не выбрано');
+}
+
 function handleCategoryPointer(event) {
-  const select = event.target.closest?.('[data-general-form] select[name="category"]');
+  const trigger = event.target.closest?.('[data-case-category-trigger]');
+  const select = trigger?.parentElement?.querySelector('select[name="category"]');
   if (!select || select.disabled) return;
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -160,18 +198,38 @@ function handleCategoryPointer(event) {
 }
 
 function handleCategoryKey(event) {
-  const select = event.target.closest?.('[data-general-form] select[name="category"]');
-  if (!select || !['Enter', ' ', 'ArrowDown'].includes(event.key)) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  void openCategoryDialog(select);
+  const trigger = event.target.closest?.('[data-case-category-trigger]');
+  if (trigger) {
+    const select = trigger.parentElement?.querySelector('select[name="category"]');
+    if (!select || !['Enter', ' ', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void openCategoryDialog(select);
+    return;
+  }
+  const search = event.target.closest?.('[data-case-category-search]');
+  if (!search || !state.dialog?.open) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeCategoryDialog();
+    return;
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveCategoryActive(event.key === 'ArrowDown' ? 1 : -1);
+    return;
+  }
+  if (event.key === 'Enter' && state.activeIndex >= 0) {
+    event.preventDefault();
+    const value = visibleCategoryValues()[state.activeIndex] || '';
+    if (value) applyCategoryValue(value);
+  }
 }
 
 async function openCategoryDialog(select) {
   state.select = select;
   const stored = await dbApi.getOptions('case_category').catch(() => []);
-  state.categories = unique([...select.options].map(option => option.value).concat(stored))
-    .filter(value => normalize(value) !== 'all');
+  state.categories = unique([select.value, ...stored]).filter(value => normalize(value) !== 'all');
   const dialog = ensureCategoryDialog();
   const search = dialog.querySelector('[data-case-category-search]');
   search.value = '';
@@ -187,9 +245,12 @@ function ensureCategoryDialog() {
   dialog.innerHTML = `<div class="case-category-picker-card">
     <div class="case-category-picker-head"><div><h3>Категория спора</h3><p>Выберите категорию из справочника.</p></div><button class="icon-button" type="button" data-case-category-close>×</button></div>
     <input type="search" data-case-category-search placeholder="Поиск категории" autocomplete="off">
-    <div class="case-category-picker-list" data-case-category-list></div>
+    <div class="case-category-picker-list" data-case-category-list role="listbox"></div>
   </div>`;
-  dialog.addEventListener('cancel', event => { event.preventDefault(); closeCategoryDialog(); });
+  dialog.addEventListener('cancel', event => {
+    event.preventDefault();
+    closeCategoryDialog();
+  });
   document.body.append(dialog);
   state.dialog = dialog;
   return dialog;
@@ -199,27 +260,77 @@ function handleCategoryClick(event) {
   if (event.target.closest?.('[data-case-category-close]')) return closeCategoryDialog();
   const button = event.target.closest?.('[data-case-category-value]');
   if (!button || !state.dialog?.contains(button)) return;
-  const value = button.dataset.caseCategoryValue || '';
-  if (![...state.select.options].some(option => option.value === value)) state.select.add(new Option(value, value));
-  state.select.value = value;
-  state.select.dispatchEvent(new Event('input', { bubbles: true }));
-  state.select.dispatchEvent(new Event('change', { bubbles: true }));
-  closeCategoryDialog();
+  applyCategoryValue(button.dataset.caseCategoryValue || '');
 }
 
 function renderCategories(query) {
   const list = state.dialog?.querySelector('[data-case-category-list]');
   if (!list) return;
-  const term = normalize(query);
-  const values = state.categories.filter(value => !term || normalize(value).includes(term));
+  const values = visibleCategoryValues(query);
+  const currentValue = normalize(state.select?.value);
+  state.activeIndex = values.length
+    ? Math.max(0, values.findIndex(value => normalize(value) === currentValue))
+    : -1;
+  if (state.activeIndex < 0 && values.length) state.activeIndex = 0;
   list.innerHTML = values.length
-    ? values.map(value => `<button type="button" data-case-category-value="${attr(value)}">${html(value)}</button>`).join('')
+    ? values.map((value, index) => `
+      <button
+        type="button"
+        role="option"
+        aria-selected="${index === state.activeIndex ? 'true' : 'false'}"
+        class="${index === state.activeIndex ? 'is-active' : ''}"
+        data-case-category-value="${attr(value)}"
+        data-case-category-index="${index}"
+      >${html(value)}</button>
+    `).join('')
     : '<div class="case-category-picker-empty">Категории не найдены</div>';
+  syncCategoryActive();
 }
 
 function closeCategoryDialog() {
   if (state.dialog?.open) state.dialog.close();
   state.select = null;
+  state.activeIndex = -1;
+}
+
+function visibleCategoryValues(query = state.dialog?.querySelector('[data-case-category-search]')?.value || '') {
+  const term = normalize(query);
+  return state.categories.filter(value => !term || normalize(value).includes(term));
+}
+
+function moveCategoryActive(step) {
+  const values = visibleCategoryValues();
+  if (!values.length) return;
+  state.activeIndex = state.activeIndex < 0
+    ? 0
+    : (state.activeIndex + step + values.length) % values.length;
+  syncCategoryActive();
+}
+
+function syncCategoryActive() {
+  const list = state.dialog?.querySelector('[data-case-category-list]');
+  if (!list) return;
+  list.querySelectorAll('[data-case-category-index]').forEach(button => {
+    const isActive = Number(button.dataset.caseCategoryIndex) === state.activeIndex;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    if (isActive) button.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function applyCategoryValue(value) {
+  if (!state.select) return;
+  let option = [...state.select.options].find(item => item.value === value);
+  if (!option) {
+    option = new Option(value, value, true, true);
+    state.select.add(option);
+  }
+  state.select.value = value;
+  state.select.dispatchEvent(new Event('input', { bubbles: true }));
+  state.select.dispatchEvent(new Event('change', { bubbles: true }));
+  const trigger = state.select.parentElement?.querySelector('[data-case-category-trigger]');
+  if (trigger) syncCategoryTrigger(state.select, trigger);
+  closeCategoryDialog();
 }
 
 function unique(values) {
@@ -230,6 +341,20 @@ function unique(values) {
   });
   return [...map.values()].sort((a, b) => a.localeCompare(b, 'ru'));
 }
-function normalize(value) { return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim(); }
-function html(value) { return String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
-function attr(value) { return html(value).replaceAll('`', '&#096;'); }
+
+function normalize(value) {
+  return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+}
+
+function html(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function attr(value) {
+  return html(value).replaceAll('`', '&#096;');
+}

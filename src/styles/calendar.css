@@ -6,6 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 18px;
 }
@@ -39,6 +40,10 @@
   font: inherit;
   outline: none;
   background: #fff;
+}
+
+.calendar-user-filter select {
+  min-width: 220px;
 }
 
 .calendar-layout {
@@ -570,6 +575,16 @@
   font-weight: 850;
 }
 
+.calendar-execution-toggle {
+  margin-bottom: 0;
+}
+
+.calendar-execution-toggle.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
 .calendar-week-arrow {
   min-width: 44px;
   height: 44px;
@@ -665,6 +680,28 @@
 
 .calendar-week-task:hover {
   border-color: #93b9ff;
+}
+
+.calendar-week-plan.execution-mode .calendar-week-task {
+  cursor: pointer;
+  outline: 2px dashed rgba(37, 99, 235, .26);
+  outline-offset: 2px;
+}
+
+.calendar-week-task.is-done {
+  opacity: .78;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.calendar-week-task-done {
+  width: max-content;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .calendar-week-task-time {

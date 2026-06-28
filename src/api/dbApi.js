@@ -107,7 +107,8 @@ function randomMetricId() {
 function normalizeAppealsForCounter(value) {
   return parseAppeals(value).map(row => ({
     ...row,
-    counter_id: row?.counter_id || randomMetricId(),
+    appeal_row_id: row?.appeal_row_id || row?.appealRowId || row?.counter_id || randomMetricId(),
+    counter_id: row?.counter_id || row?.appeal_row_id || row?.appealRowId || randomMetricId(),
     counter_created_at: row?.counter_created_at || new Date().toISOString()
   }));
 }
@@ -233,6 +234,7 @@ export const dbApi = {
   logout: () => request('/api/auth/logout', { method: 'POST', body: '{}' }),
   getOptions: category => request(`/api/options?category=${encodeURIComponent(category)}`),
   getUsers: () => request('/api/users'),
+  getCalendarUsers: () => request('/api/calendar-users'),
   getAdminUsers: () => request('/api/admin/users'),
   createAdminUser: data => request('/api/admin/users', { method: 'POST', body: JSON.stringify(data) }),
   updateAdminUser: (id, data) => request(`/api/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -328,12 +330,13 @@ export const dbApi = {
   },
   deleteCourtSchedule: id => request(`/api/court-schedule/${id}`, { method: 'DELETE' }),
 
-  getCalendarTasks: ({ date = '', start = '', end = '', user = '', generalCaseId = '' } = {}) => {
+  getCalendarTasks: ({ date = '', start = '', end = '', user = '', scope = '', generalCaseId = '' } = {}) => {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
     if (start) params.set('start', start);
     if (end) params.set('end', end);
     if (user) params.set('user', user);
+    if (scope) params.set('scope', scope);
     if (generalCaseId) params.set('general_case_id', generalCaseId);
     const query = params.toString();
     return request(`/api/calendar-tasks${query ? `?${query}` : ''}`);

@@ -26,8 +26,10 @@ export function initAdminDictionariesPage() {
   document.querySelector('[data-admin-dictionaries-body]')?.addEventListener('click', event => {
     const editButton = event.target.closest('[data-admin-option-edit]');
     const deleteButton = event.target.closest('[data-admin-option-delete]');
+    const moveButton = event.target.closest('[data-admin-option-move]');
     if (editButton) fillForm(form, editButton.dataset.adminOptionEdit);
     if (deleteButton) deleteOption(deleteButton.dataset.adminOptionDelete);
+    if (moveButton) moveOption(moveButton.dataset.adminOptionMove, Number(moveButton.dataset.direction || 0));
   });
 
   window.addEventListener('app:view-changed', event => {
@@ -58,20 +60,23 @@ function renderOptions() {
   const category = form?.elements.category?.value || '';
   const options = state.options.filter(option => option.category === category);
   const meetingMode = isMeetingCategory(category);
-  renderTableHead(meetingMode);
+  const appealTypeMode = category === 'appeal_type';
+  renderTableHead(meetingMode, appealTypeMode);
 
   if (!options.length) {
-    body.innerHTML = `<tr><td colspan="${meetingMode ? 5 : 3}">Значения не найдены</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${meetingMode ? 5 : appealTypeMode ? 5 : 3}">Значения не найдены</td></tr>`;
     return;
   }
 
   body.innerHTML = options.map((option, index) => meetingMode
     ? renderMeetingOptionRow(option)
-    : renderSimpleOptionRow(option, index)
+    : appealTypeMode
+      ? renderAppealTypeOptionRow(option, index, options.length)
+      : renderSimpleOptionRow(option, index)
   ).join('');
 }
 
-function renderTableHead(meetingMode) {
+function renderTableHead(meetingMode, appealTypeMode = false) {
   const head = document.querySelector('[data-admin-dictionaries-head]');
   if (!head) return;
   head.innerHTML = meetingMode
@@ -84,7 +89,17 @@ function renderTableHead(meetingMode) {
         <th></th>
       </tr>
     `
-    : `
+    : appealTypeMode
+      ? `
+      <tr>
+        <th>№</th>
+        <th>Название</th>
+        <th>Код</th>
+        <th>Порядок</th>
+        <th></th>
+      </tr>
+    `
+      : `
       <tr>
         <th>№</th>
         <th>Значение</th>
@@ -101,6 +116,25 @@ function renderSimpleOptionRow(option, index) {
       <td class="admin-users-row-actions">
         <button class="btn tiny" data-admin-option-edit="${escapeAttr(option.id)}" type="button">Изменить</button>
         <button class="btn tiny danger" data-admin-option-delete="${escapeAttr(option.id)}" type="button">Удалить</button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderAppealTypeOptionRow(option, index, total) {
+  const system = Number(option.system_flag || 0) === 1;
+  return `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(option.value)}</td>
+      <td>${escapeHtml(option.code || (system ? 'system' : 'custom'))}</td>
+      <td class="admin-users-row-actions">
+        <button class="btn tiny" data-admin-option-move="${escapeAttr(option.id)}" data-direction="-1" type="button" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn tiny" data-admin-option-move="${escapeAttr(option.id)}" data-direction="1" type="button" ${index === total - 1 ? 'disabled' : ''}>↓</button>
+      </td>
+      <td class="admin-users-row-actions">
+        <button class="btn tiny" data-admin-option-edit="${escapeAttr(option.id)}" type="button">Изменить</button>
+        <button class="btn tiny danger" data-admin-option-delete="${escapeAttr(option.id)}" type="button" ${system ? 'disabled title="Системное значение нельзя удалить"' : ''}>Удалить</button>
       </td>
     </tr>
   `;
@@ -128,6 +162,10 @@ async function saveOption(form) {
     category: form.elements.category.value,
     value: form.elements.value.value.trim(),
   };
+  if (payload.id) {
+    const existing = state.options.find(option => String(option.id) === String(payload.id));
+    if (existing?.category === 'appeal_type') payload.sort_order = Number(existing.sort_order ?? 999);
+  }
   if (meetingMode) {
     payload.position = form.elements.position.value.trim();
     payload.leadership = form.elements.leadership.value.trim();
@@ -135,6 +173,16 @@ async function saveOption(form) {
   }
   if (!payload.value) {
     setStatus(meetingMode ? 'Заполните ФИО участника.' : 'Заполните значение справочника.');
+    return;
+  }
+  const normalizedValue = normalizeDictionaryValue(payload.value);
+  const duplicate = state.options.some(option =>
+    option.category === payload.category
+    && String(option.id) !== String(payload.id || '')
+    && normalizeDictionaryValue(option.value) === normalizedValue
+  );
+  if (duplicate) {
+    setStatus('Такое значение уже есть в справочнике.');
     return;
   }
   if (meetingMode && !payload.position) {
@@ -149,8 +197,38 @@ async function saveOption(form) {
   } catch (error) {
     setStatus(error.message === 'position_required'
       ? 'Заполните должность участника.'
+      : error.message === 'option_duplicate'
+        ? 'Такое значение уже есть в справочнике.'
       : error.message || 'Ошибка сохранения.');
   }
+}
+
+async function moveOption(id, direction) {
+  const form = document.querySelector('[data-admin-dictionary-form]');
+  const category = form?.elements.category?.value || '';
+  if (category !== 'appeal_type' || !direction) return;
+  const options = state.options
+    .filter(option => option.category === category)
+    .sort((a, b) => Number(a.sort_order ?? 999) - Number(b.sort_order ?? 999) || String(a.value || '').localeCompare(String(b.value || ''), 'ru'));
+  const index = options.findIndex(option => String(option.id) === String(id));
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= options.length) return;
+  const current = options[index];
+  const target = options[nextIndex];
+  const currentOrder = Number(current.sort_order ?? (index + 1) * 10);
+  const targetOrder = Number(target.sort_order ?? (nextIndex + 1) * 10);
+  try {
+    await dbApi.saveAdminOption({ id: current.id, category: current.category, value: current.value, sort_order: targetOrder });
+    await dbApi.saveAdminOption({ id: target.id, category: target.category, value: target.value, sort_order: currentOrder });
+    await loadOptions();
+    setStatus('Порядок обновлён.');
+  } catch (error) {
+    setStatus(error.message === 'option_duplicate' ? 'Такое значение уже есть в справочнике.' : error.message || 'Не удалось изменить порядок.');
+  }
+}
+
+function normalizeDictionaryValue(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('ru-RU');
 }
 
 async function deleteOption(id) {
@@ -164,6 +242,8 @@ async function deleteOption(id) {
   } catch (error) {
     setStatus(error.message === 'option_in_use'
       ? 'Значение используется в данных и не может быть удалено.'
+      : error.message === 'system_option_protected'
+        ? 'Системное значение нельзя удалить, можно изменить только название.'
       : error.message || 'Ошибка удаления.');
   }
 }

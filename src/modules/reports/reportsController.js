@@ -2,12 +2,6 @@ import { dbApi } from '../../api/dbApi.js';
 import { getAuthSession } from '../../auth/session.js';
 import { hasPermission, PERMISSIONS, ROLE_LEVELS } from '../../core/permissions.js';
 
-const STATUS_LEGEND = [
-  'Зелёный — план выполняется, 0–2 заседания в день.',
-  'Жёлтый — 3–4 заседания либо нагрузка выше плана на 20%.',
-  'Красный — 5+ заседаний, просроченные судебные акты или конфликт расписания.',
-].join('\n');
-
 const DEFAULT_PREVIOUS_YEAR_MESSAGE =
   'В правовой системе «ЮрСфера» данные за предыдущий год отсутствуют';
 
@@ -405,25 +399,23 @@ function renderDailyReport(root, data = {}) {
   const hearings = getRows(daily, data, ['hearings', 'hearings_today', 'day_hearings']);
   const tasks = getRows(daily, data, ['tasks', 'calendar_tasks', 'today_tasks']);
   const employees = getEmployeeCards(daily, data, hearings, tasks);
-  const critical = getCriticalPoints(daily, data, employees);
+  const dayMetrics = {
+    ...metrics,
+    hearings_day: filterDayHearings(hearings, tasks).length,
+    overdue_tasks: filterDayOverdueTasks(tasks).length,
+  };
 
-  renderDayKpis(root, metrics, critical.length);
+  renderDayKpis(root, dayMetrics);
   setText(root.querySelector('[data-reports-hearings-title]'), `Заседания ${formatDate(state.date)}`);
-  renderHearings(root, hearings);
+  renderHearings(root, filterDayHearings(hearings, tasks));
   renderEmployeeCards(root, employees);
-  renderCriticalPoints(root, critical);
-  renderTimeline(root, employees, hearings);
   renderControlled(root, getRows(daily, data, ['controlled_cases', 'nearest_controlled_cases', 'upcoming_controlled_cases']));
 }
 
-function renderDayKpis(root, metrics = {}, criticalCount = 0) {
+function renderDayKpis(root, metrics = {}) {
   const items = [
-    ['Активные дела', pickMetric(metrics, ['active_cases_day', 'active_cases']), 'за день'],
     ['Заседания', pickMetric(metrics, ['hearings_day', 'hearings_today', 'hearings']), 'за день'],
-    ['Задачи выполнено', pickMetric(metrics, ['completed_tasks', 'done_tasks', 'tasks_done']), 'за день'],
-    ['Задачи всего', pickMetric(metrics, ['total_tasks', 'calendar_tasks', 'tasks_total']), 'за день'],
     ['Просрочки', pickMetric(metrics, ['overdue_tasks', 'overdue']), 'за день'],
-    ['Критические точки', pickMetric(metrics, ['critical_points', 'critical_count'], criticalCount), 'за день'],
   ];
 
   const node = root.querySelector('[data-reports-day-kpis]');
@@ -456,7 +448,6 @@ function renderEmployeeCards(root, employees) {
 }
 
 function renderEmployeeCard(employee) {
-  const status = getEmployeeStatus(employee);
   const doneTasks = getTaskRows(employee, ['done_tasks_list', 'completed_tasks_list', 'completed_tasks', 'done_tasks']);
   const remainingTasks = getTaskRows(employee, ['remaining_tasks', 'open_tasks_list', 'open_tasks']);
   const hearings = getTaskRows(employee, ['hearings', 'day_hearings']);
@@ -479,17 +470,13 @@ function renderEmployeeCard(employee) {
   const updated = formatEmployeeUpdatedAt(employee);
 
   return `
-    <article class="reports-employee-card status-${status.level}">
+    <article class="reports-employee-card">
       <div class="reports-employee-head">
         <div class="reports-employee-identity">
           <div class="reports-employee-avatar" aria-hidden="true">${escapeHtml(getInitials(name))}</div>
           <div class="reports-employee-title-block">
             <h4>${escapeHtml(name)}</h4>
             <div class="reports-employee-meta">
-              <button class="reports-status-chip" type="button" title="${escapeHtml(STATUS_LEGEND)}" aria-label="${escapeHtml(status.text)}. ${escapeHtml(STATUS_LEGEND)}">
-                <span aria-hidden="true"></span>
-                ${escapeHtml(status.text)}
-              </button>
               ${updated ? `<span class="reports-employee-updated">${escapeHtml(updated)}</span>` : ''}
             </div>
           </div>
@@ -510,16 +497,12 @@ function renderEmployeeCard(employee) {
           <h5>Выполнение плана</h5>
           <div class="reports-plan-main">
             <div>
-              <strong>${formatMaybeNumber(safeCompleted)} из ${formatMaybeNumber(safeTotal)} задач</strong>
-              <p>Выполнено ${progress}% за выбранный период</p>
+              <strong>Выполнение плана: ${formatMaybeNumber(safeCompleted)} из ${formatMaybeNumber(safeTotal)}</strong>
+              <p>Осталось выполнить: ${formatMaybeNumber(remainingCount)}</p>
             </div>
             <span class="reports-plan-percent">${progress}%</span>
           </div>
           <div class="reports-plan-progress" aria-hidden="true"><span style="width:${progress}%"></span></div>
-          <div class="reports-plan-stats">
-            <div><span>Выполнено</span><strong>${formatMaybeNumber(safeCompleted)}</strong></div>
-            <div><span>Осталось</span><strong>${formatMaybeNumber(remainingCount)}</strong></div>
-          </div>
         </section>
 
         <section class="reports-employee-section reports-hearings-card">
@@ -537,27 +520,6 @@ function renderEmployeeCard(employee) {
         </section>
       </div>
 
-      <div class="reports-employee-tasks-row">
-        <div class="reports-task-metric-card is-done" aria-label="Выполненные задачи">
-          <span>
-            <b>Выполнено</b>
-            <small>за выбранный период</small>
-          </span>
-          <strong>${formatMaybeNumber(safeCompleted)}</strong>
-        </div>
-
-        <button class="reports-task-metric-card is-remaining" data-reports-remaining-user="${escapeAttr(employeeKey)}" type="button" aria-label="Открыть оставшиеся задачи сотрудника ${escapeAttr(name)}">
-          <span>
-            <b>Осталось выполнить</b>
-            <small>Открыть список</small>
-          </span>
-          <strong>${formatMaybeNumber(remainingCount)}</strong>
-        </button>
-      </div>
-
-      <div class="reports-employee-note">
-        <span>Ключевые показатели видны сразу, а задачи сгруппированы по смыслу</span>
-      </div>
     </article>
   `;
 }
@@ -620,113 +582,6 @@ function renderCriticalPoints(root, rows) {
       <p>${escapeHtml(row.reason || row.description || row.message || 'Причина не указана')}</p>
     </div>
   `).join('') : emptyState('Критические точки по выбранной дате не найдены.');
-}
-
-function renderTimeline(root, employees, hearings) {
-  const node = root.querySelector('[data-reports-timeline]');
-  if (!node) return;
-  const sourceHearings = uniqueTimelineHearings(filterTimelineHearings(hearings));
-  const sourceEmployees = buildTimelineSourceEmployees(employees, sourceHearings);
-  if (!sourceEmployees.length) {
-    node.innerHTML = emptyState('На выбранную дату судебных заседаний нет');
-    return;
-  }
-
-  const allHearings = sourceEmployees.flatMap(employee => getTaskRows(employee, ['hearings', 'day_hearings']));
-  const minutes = allHearings.map(row => parseTimeMinutes(row.time || row.start_time)).filter(value => value !== null);
-  const start = minutes.length ? Math.max(0, Math.min(...minutes) - 60) : 8 * 60;
-  const end = minutes.length ? Math.min(24 * 60, Math.max(...minutes) + 90) : 18 * 60;
-  const span = Math.max(end - start, 60);
-
-  node.innerHTML = `
-    <div class="reports-timeline-scale">
-      <span>${formatTime(start)}</span>
-      <span>${formatTime(start + span / 2)}</span>
-      <span>${formatTime(end)}</span>
-    </div>
-    ${sourceEmployees.map(employee => {
-      const employeeHearings = getTaskRows(employee, ['hearings', 'day_hearings']);
-      return `
-        <div class="reports-timeline-row">
-          <strong>${escapeHtml(employee.user_name || employee.full_name || employee.name || 'Сотрудник')}</strong>
-          <div class="reports-timeline-track">
-            ${employeeHearings.map(row => {
-              const value = parseTimeMinutes(row.time || row.start_time);
-              const left = value === null ? 0 : Math.max(0, Math.min(100, ((value - start) / span) * 100));
-              const details = formatTimelineHearingDetails(row, employee);
-              return `
-                <span class="reports-timeline-item ${row.conflict || row.has_conflict ? 'is-conflict' : ''}" style="left:${left}%">
-                  <b>${escapeHtml(row.time || row.start_time || '—')}</b>
-                  ${escapeHtml(row.court || row.court_name || 'Суд')}
-                  <small>${escapeHtml(details)}</small>
-                </span>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      `;
-    }).join('')}
-  `;
-}
-
-function buildTimelineSourceEmployees(employees = [], hearings = []) {
-  const employeeRows = employees.length ? employees : getSelectedReportUsersForTimeline();
-  if (!employeeRows.length) return buildTimelineEmployees(hearings);
-
-  const rows = employeeRows
-    .map(employee => {
-      const currentHearings = getTaskRows(employee, ['hearings', 'day_hearings']);
-      if (currentHearings.length) {
-        return { ...employee, hearings: uniqueTimelineHearings(filterTimelineHearings(currentHearings)) };
-      }
-      const name = employee.user_name || employee.full_name || employee.name || employee.representative || '';
-      const matchedHearings = hearings.filter(row => matchesPerson(row, name, employee));
-      return { ...employee, hearings: matchedHearings };
-    })
-    .filter(employee => getTaskRows(employee, ['hearings', 'day_hearings']).length);
-
-  return rows.length ? rows : buildTimelineEmployees(hearings);
-}
-
-function filterTimelineHearings(rows = []) {
-  const selectedDate = normalizeReportDateKey(state.date || todayIso());
-  return (rows || []).filter(row => {
-    const rowDate = normalizeReportDateKey(
-      row.session_date || row.hearing_date || row.hearingDate || row.event_date || row.date || row.date_str || row.datetime
-    );
-    if (!rowDate) return true;
-    return rowDate === selectedDate;
-  });
-}
-
-function uniqueTimelineHearings(rows = []) {
-  const seen = new Set();
-  return (rows || []).filter(row => {
-    const key = [
-      row.id || row.schedule_id || row.hearing_id,
-      row.general_case_id || row.case_id,
-      row.session_date || row.hearing_date || row.hearingDate || row.event_date || row.date || row.date_str || row.datetime,
-      row.time || row.start_time,
-      row.court || row.court_name,
-      row.representative || row.employee || row.case_executor,
-    ].map(value => String(value || '').trim()).join('|');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function getSelectedReportUsersForTimeline() {
-  if (state.allUsers || !state.selectedUserIds.length) return [];
-  const selectedIds = new Set(state.selectedUserIds.map(Number));
-  return state.availableUsers.filter(user => selectedIds.has(Number(user.id || user.user_id)));
-}
-
-function formatTimelineHearingDetails(row = {}, employee = {}) {
-  const employeeName = employee.user_name || employee.full_name || employee.name || getPrimaryPersonName(row);
-  const caseNumber = row.case_number || row.case_no || row.court_case_number || row.pk_number || row.general_case_number || '';
-  const subject = row.subject || row.claim_subject || row.result || row.description || row.desc || '';
-  return [employeeName, caseNumber, subject].filter(Boolean).join(' · ');
 }
 
 function renderControlled(root, rows) {
@@ -1020,7 +875,6 @@ function renderQuarterlyReport(root, data = {}) {
   renderExecutorReport(root, getRows(quarter, data, ['executor_report', 'by_executor', 'executor_categories']));
   renderQuarterTotals(root, quarter, data, metrics);
   renderStructureChart(root);
-  renderStructureBreakdown(root);
   renderStructureTable(root);
 }
 
@@ -1202,16 +1056,19 @@ function renderStructureChart(root) {
   if (!node) return;
   const rows = state.latestCategoryRows;
   const max = Math.max(...rows.map(row => Number(row.count || 0)), 1);
-  node.innerHTML = rows.length ? rows.map(row => {
-    const width = Math.max(4, Math.round((Number(row.count || 0) / max) * 100));
+  const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+  node.innerHTML = rows.length ? `<div class="reports-column-chart">${rows.map(row => {
+    const height = Math.max(4, Math.round((Number(row.count || 0) / max) * 100));
+    const share = total ? (Number(row.count || 0) / total) * 100 : 0;
+    const color = getCategoryColor(row.category);
     return `
-      <button type="button" class="reports-bar-row ${row.category === state.selectedCategory ? 'active' : ''}" data-reports-category="${escapeAttr(row.category)}">
-        <span class="reports-bar-label">${escapeHtml(row.category)}</span>
-        <span class="reports-bar-track"><span style="width:${width}%"></span></span>
-        <b>${formatMaybeNumber(row.count)}</b>
+      <button type="button" class="reports-column-bar ${row.category === state.selectedCategory ? 'active' : ''}" data-reports-category="${escapeAttr(row.category)}" style="--category-color:${color}">
+        <b>${formatMaybeNumber(row.count)} (${formatPercent(share)})</b>
+        <span class="reports-column-bar-track"><i style="height:${height}%"></i></span>
+        <span class="reports-column-bar-label">${escapeHtml(row.category)}</span>
       </button>
     `;
-  }).join('') : emptyState('Нет данных по структуре дел за выбранный период.');
+  }).join('')}</div>` : emptyState('Нет данных по структуре дел за выбранный период.');
 }
 
 function renderStructureBreakdown(root) {
@@ -1240,7 +1097,7 @@ function renderStructureTable(root) {
   const period = `${quarterLabel(state.quarter)} ${state.year}`;
   node.innerHTML = state.latestStructureRows.length ? state.latestStructureRows.map(row => `
     <tr>
-      <td>${escapeHtml(row.category)}</td>
+      <td><span class="reports-category-dot" style="background:${getCategoryColor(row.category)}"></span>${escapeHtml(row.category)}</td>
       <td>${escapeHtml(row.subject)}</td>
       <td>${formatMaybeNumber(row.count)}</td>
       <td>${formatPercent(row.share)}</td>
@@ -1251,22 +1108,76 @@ function renderStructureTable(root) {
 
 function getEmployeeCards(scoped, data, hearings, tasks) {
   const direct = getRows(scoped, data, ['employee_cards', 'employees', 'employee_statuses']);
-  if (direct.length) return direct;
+  const dayTasks = filterReportDayTasks(tasks);
+  if (direct.length) {
+    return direct.map(row => {
+      const name = row.user_name || row.full_name || row.name || '';
+      const employeeTasks = dayTasks.filter(task => matchesPerson(task, name, row));
+      const planTasks = employeeTasks.filter(task => !isReportHearingTask(task));
+      const employeeHearings = employeeTasks.filter(isReportHearingTask);
+      return {
+        ...row,
+        hearings: employeeHearings,
+        done_tasks_list: planTasks.filter(isReportDoneTask),
+        remaining_tasks: planTasks.filter(task => !isReportDoneTask(task)),
+        total_tasks: planTasks.length,
+        completed_tasks_count: planTasks.filter(isReportDoneTask).length,
+      };
+    });
+  }
 
   const workload = getRows(scoped, data, ['workload']);
   return workload.map(row => {
     const name = row.user_name || row.full_name || row.name || '';
-    const employeeHearings = hearings.filter(hearing => matchesPerson(hearing, name, row));
-    const employeeTasks = tasks.filter(task => matchesPerson(task, name, row));
+    const employeeTasks = dayTasks.filter(task => matchesPerson(task, name, row));
+    const employeeHearings = employeeTasks.filter(isReportHearingTask);
+    const planTasks = employeeTasks.filter(task => !isReportHearingTask(task));
     return {
       ...row,
       hearings: employeeHearings,
-      done_tasks_list: employeeTasks.filter(task => Number(task.done || task.completed || 0) === 1),
-      remaining_tasks: employeeTasks.filter(task => Number(task.done || task.completed || 0) !== 1),
-      total_tasks: row.total_tasks ?? employeeTasks.length,
-      completed_tasks_count: row.completed_tasks_count ?? employeeTasks.filter(task => Number(task.done || task.completed || 0) === 1).length,
+      done_tasks_list: planTasks.filter(isReportDoneTask),
+      remaining_tasks: planTasks.filter(task => !isReportDoneTask(task)),
+      total_tasks: planTasks.length,
+      completed_tasks_count: planTasks.filter(isReportDoneTask).length,
     };
   });
+}
+
+function filterReportDayTasks(tasks = []) {
+  const selected = normalizeReportDateKey(state.date || todayIso());
+  return (Array.isArray(tasks) ? tasks : [])
+    .filter(task => String(task.event_scope || 'work') !== 'personal')
+    .filter(task => coversReportDate(task, selected));
+}
+
+function filterDayHearings(hearings = [], tasks = []) {
+  const taskHearings = filterReportDayTasks(tasks).filter(isReportHearingTask);
+  if (taskHearings.length) return taskHearings;
+  return (Array.isArray(hearings) ? hearings : []).filter(row => coversReportDate(row, normalizeReportDateKey(state.date || todayIso())));
+}
+
+function filterDayOverdueTasks(tasks = []) {
+  const selected = normalizeReportDateKey(state.date || todayIso());
+  return filterReportDayTasks(tasks)
+    .filter(task => !isReportDoneTask(task))
+    .filter(task => {
+      const key = normalizeReportDateKey(task.date_str || task.date || task.deadline || task.due_date || '');
+      return Boolean(key && key < selected);
+    });
+}
+
+function isReportHearingTask(task = {}) {
+  return String(task.task_type || task.type || '') === 'судебное_заседание';
+}
+
+function isReportDoneTask(task = {}) {
+  return Number(task.done || task.completed || 0) === 1;
+}
+
+function coversReportDate(row = {}, selected) {
+  const start = normalizeReportDateKey(row.date_str || row.date || row.start_date || row.session_date || row.hearing_date || '');
+  const end = normalizeReportDateKey(row.end_date || '') || start;
+  return Boolean(start && start <= selected && end >= selected);
 }
 
 function getEmployeeStatus(employee) {
@@ -1310,7 +1221,7 @@ function getEmployeeStatus(employee) {
 
   return {
     level: 'green',
-    text: 'В норме',
+    text: '',
       reasons: overdueTasks > 0 ? [`${overdueTasks} просроченных задач`] : ['0–2 заседания, критические признаки не указаны'],
   };
 }
@@ -1387,99 +1298,291 @@ function normalizeProsecutorRows(prosecutor = {}) {
 }
 
 async function copyReportBlock(kind, root) {
-  const chartBlob = kind !== 'table' ? await createChartPngBlob() : null;
-  const tableHtml = kind !== 'chart' ? buildStructureTableHtml(root) : '';
-  const tsv = kind !== 'chart' ? buildStructureTsv(root) : '';
-
   try {
-    if (navigator.clipboard?.write && window.ClipboardItem) {
-      const payload = {};
-      if (chartBlob) payload['image/png'] = chartBlob;
-      if (tableHtml) payload['text/html'] = new Blob([tableHtml], { type: 'text/html' });
-      if (tsv) payload['text/plain'] = new Blob([tsv], { type: 'text/plain' });
-      await navigator.clipboard.write([new ClipboardItem(payload)]);
-      setStatus('Данные скопированы в буфер обмена.');
-      return;
-    }
-
-    if (navigator.clipboard?.writeText && tsv) {
-      await navigator.clipboard.writeText(tsv);
-      if (chartBlob) downloadBlob(chartBlob, 'reports-structure-chart.png');
-      setStatus('Clipboard API для изображений недоступен. Таблица скопирована текстом, диаграмма скачана PNG.');
-      return;
-    }
+    const blob = await buildStructureDocx();
+    downloadBlob(blob, getStructureDocxFileName());
+    setStatus('Word-документ с диаграммой и таблицей создан');
   } catch (error) {
-    if (chartBlob) downloadBlob(chartBlob, 'reports-structure-chart.png');
-    if (tsv) fallbackCopyText(tsv);
-    setStatus(`Не удалось выполнить прямое копирование. Использован fallback. ${error?.message || ''}`.trim(), true);
-    return;
+    setStatus(`Не удалось создать DOCX: ${error?.message || 'ошибка формирования документа'}`, true);
   }
-
-  if (chartBlob) downloadBlob(chartBlob, 'reports-structure-chart.png');
-  if (tsv) fallbackCopyText(tsv);
-  setStatus('Clipboard API недоступен. PNG скачан, текст подготовлен для ручного копирования.', true);
 }
 
-function createChartPngBlob() {
-  return new Promise(resolve => {
-    const rows = state.latestCategoryRows;
-    const width = 960;
-    const height = Math.max(260, 90 + rows.length * 52);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = '#10233f';
-    ctx.font = '700 24px Arial, sans-serif';
-    ctx.fillText('Структура судебных дел по категориям', 32, 42);
-
-    const max = Math.max(...rows.map(row => Number(row.count || 0)), 1);
-    rows.forEach((row, index) => {
-      const y = 82 + index * 52;
-      const barWidth = Math.round((Number(row.count || 0) / max) * 520);
-      ctx.fillStyle = '#4f6481';
-      ctx.font = '600 16px Arial, sans-serif';
-      ctx.fillText(truncateText(row.category, 38), 32, y + 19);
-      ctx.fillStyle = '#e7eef9';
-      ctx.fillRect(360, y, 540, 24);
-      ctx.fillStyle = '#2457d6';
-      ctx.fillRect(360, y, Math.max(8, barWidth), 24);
-      ctx.fillStyle = '#10233f';
-      ctx.font = '700 16px Arial, sans-serif';
-      ctx.fillText(String(row.count || 0), 916, y + 18);
-    });
-
-    canvas.toBlob(blob => resolve(blob), 'image/png');
+async function buildStructureDocx() {
+  const period = `${quarterLabel(state.quarter)} ${state.year}`;
+  const imageBytes = await createStructureChartPngBytes();
+  const documentXml = buildStructureDocumentXml(period, imageBytes.length);
+  const files = [
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`],
+    ['word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdChart" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/structure.png"/>
+</Relationships>`],
+    ['word/document.xml', documentXml],
+    ['word/media/structure.png', imageBytes],
+  ];
+  return new Blob([createZipArchive(files)], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   });
 }
 
-function buildStructureTableHtml(root) {
-  const table = root.querySelector('[data-reports-structure-table]');
-  if (!table) return '';
-  return `
-    <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;background:#fff;color:#111;">
-      ${table.innerHTML}
-    </table>
-  `;
+function buildStructureDocumentXml(period) {
+  const rows = state.latestStructureRows.length
+    ? state.latestStructureRows
+    : state.latestCategoryRows.map(row => ({
+      category: row.category,
+      subject: 'Предмет спора не детализирован',
+      count: row.count,
+      share: 0,
+      period
+    }));
+  const tableRows = rows.map(row => `
+    <w:tr>
+      ${wordCell(row.category)}
+      ${wordCell(row.subject)}
+      ${wordCell(formatMaybeNumber(row.count))}
+      ${wordCell(formatPercent(row.share))}
+      ${wordCell(row.period || period)}
+    </w:tr>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    ${wordParagraph('Структура судебных дел по категориям и предмету спора', true)}
+    ${wordParagraph(period)}
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="5486400" cy="2743200"/>
+            <wp:docPr id="1" name="Диаграмма структуры судебных дел"/>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr><pic:cNvPr id="1" name="structure.png"/><pic:cNvPicPr/></pic:nvPicPr>
+                  <pic:blipFill><a:blip r:embed="rIdChart"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+                  <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="2743200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:left w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:right w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="999999"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="999999"/></w:tblBorders></w:tblPr>
+      <w:tr>${wordCell('Категория')}${wordCell('Предмет спора')}${wordCell('Количество')}${wordCell('Доля')}${wordCell('Период')}</w:tr>
+      ${tableRows}
+    </w:tbl>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="850" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>
+  </w:body>
+</w:document>`;
 }
 
-function buildStructureTsv(root) {
-  const rows = [...root.querySelectorAll('[data-reports-structure-table] tr')];
-  return rows.map(row => [...row.children].map(cell => cell.textContent.trim()).join('\t')).join('\n');
+function wordParagraph(text, bold = false) {
+  return `<w:p><w:r>${bold ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function fallbackCopyText(text) {
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  document.body.append(textarea);
-  textarea.select();
-  try { document.execCommand('copy'); } catch {}
-  textarea.remove();
+function wordCell(text) {
+  return `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>${escapeXml(text)}</w:t></w:r></w:p></w:tc>`;
+}
+
+async function createStructureChartPngBytes() {
+  const rows = state.latestCategoryRows;
+  const canvas = document.createElement('canvas');
+  canvas.width = 960;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 24px Arial';
+  ctx.fillText('Структура судебных дел', 32, 42);
+  const total = rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+  const max = Math.max(...rows.map(row => Number(row.count || 0)), 1);
+  const chartTop = 86;
+  const chartBottom = 360;
+  const gap = 18;
+  const barWidth = rows.length ? Math.max(36, Math.min(86, (canvas.width - 64 - gap * (rows.length - 1)) / rows.length)) : 64;
+  rows.forEach((row, index) => {
+    const value = Number(row.count || 0);
+    const x = 32 + index * (barWidth + gap);
+    const height = Math.max(8, Math.round((value / max) * (chartBottom - chartTop)));
+    const y = chartBottom - height;
+    ctx.fillStyle = getCategoryColor(row.category);
+    ctx.fillRect(x, y, barWidth, height);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '700 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(value), x + barWidth / 2, y - 8);
+    ctx.font = '12px Arial';
+    wrapCanvasText(ctx, row.category, x + barWidth / 2, chartBottom + 22, barWidth + gap, 15, 3);
+  });
+  if (!rows.length) {
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Нет данных по структуре дел за выбранный период', canvas.width / 2, canvas.height / 2);
+  }
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#475569';
+  ctx.font = '14px Arial';
+  ctx.fillText(`Всего: ${formatMaybeNumber(total)}`, 32, 450);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  lines.slice(0, maxLines).forEach((item, index) => {
+    ctx.fillText(index === maxLines - 1 && lines.length > maxLines ? `${item.slice(0, 16)}...` : item, x, y + index * lineHeight);
+  });
+}
+
+function getStructureDocxFileName() {
+  return `Структура_судебных_дел_${quarterLabel(state.quarter).replace(/\s+/g, '_')}_${state.year}.docx`;
+}
+
+function createZipArchive(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  files.forEach(([name, content]) => {
+    const nameBytes = encoder.encode(name);
+    const data = content instanceof Uint8Array ? content : encoder.encode(String(content));
+    const crc = crc32(data);
+    const local = zipLocalHeader(nameBytes, data, crc);
+    localParts.push(local, data);
+    centralParts.push(zipCentralHeader(nameBytes, data, crc, offset));
+    offset += local.length + data.length;
+  });
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = zipEndRecord(files.length, centralSize, offset);
+  return concatUint8([...localParts, ...centralParts, end]);
+}
+
+function zipLocalHeader(nameBytes, data, crc) {
+  const out = new Uint8Array(30 + nameBytes.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x04034b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(8, 0, true);
+  view.setUint16(10, zipTime(), true);
+  view.setUint16(12, zipDate(), true);
+  view.setUint32(14, crc, true);
+  view.setUint32(18, data.length, true);
+  view.setUint32(22, data.length, true);
+  view.setUint16(26, nameBytes.length, true);
+  out.set(nameBytes, 30);
+  return out;
+}
+
+function zipCentralHeader(nameBytes, data, crc, offset) {
+  const out = new Uint8Array(46 + nameBytes.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x02014b50, true);
+  view.setUint16(4, 20, true);
+  view.setUint16(6, 20, true);
+  view.setUint16(10, 0, true);
+  view.setUint16(12, zipTime(), true);
+  view.setUint16(14, zipDate(), true);
+  view.setUint32(16, crc, true);
+  view.setUint32(20, data.length, true);
+  view.setUint32(24, data.length, true);
+  view.setUint16(28, nameBytes.length, true);
+  view.setUint32(42, offset, true);
+  out.set(nameBytes, 46);
+  return out;
+}
+
+function zipEndRecord(count, centralSize, centralOffset) {
+  const out = new Uint8Array(22);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x06054b50, true);
+  view.setUint16(8, count, true);
+  view.setUint16(10, count, true);
+  view.setUint32(12, centralSize, true);
+  view.setUint32(16, centralOffset, true);
+  return out;
+}
+
+function zipTime(date = new Date()) {
+  return (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+}
+
+function zipDate(date = new Date()) {
+  return ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+}
+
+function concatUint8(parts) {
+  const size = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(size);
+  let offset = 0;
+  parts.forEach(part => {
+    out.set(part, offset);
+    offset += part.length;
+  });
+  return out;
+}
+
+function crc32(data) {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function escapeXml(value) {
+  return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+}
+
+function normalizeCategoryName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('ru-RU');
+}
+
+function getCategoryColor(category) {
+  const key = normalizeCategoryName(category);
+  const fixed = {
+    'выморочка': '#7C3AED',
+    'отзыв показать': '#0D9488',
+    'аварийный фонд': '#EA580C',
+  };
+  if (fixed[key]) return fixed[key];
+  const palette = ['#2563EB', '#16A34A', '#DB2777', '#9333EA', '#0891B2', '#CA8A04', '#4F46E5', '#DC2626'];
+  let hash = 0;
+  for (const char of key) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return palette[Math.abs(hash) % palette.length];
 }
 
 function downloadBlob(blob, fileName) {
@@ -1685,7 +1788,6 @@ function renderErrorState(root) {
   setHtml(root.querySelector('[data-reports-hearings]'), emptyState('Не удалось загрузить заседания.'));
   setHtml(root.querySelector('[data-reports-critical]'), emptyState('Не удалось загрузить критические точки.'));
   setHtml(root.querySelector('[data-reports-employee-cards]'), emptyState('Не удалось загрузить карточки сотрудников.'));
-  setHtml(root.querySelector('[data-reports-timeline]'), emptyState('Не удалось загрузить график.'));
   setHtml(root.querySelector('[data-reports-controlled]'), emptyState('Не удалось загрузить контрольные дела.'));
   setHtml(root.querySelector('[data-reports-quarter-inflow]'), emptyState('Не удалось загрузить квартальные показатели.'));
 }
@@ -1717,7 +1819,7 @@ function statusText(value) {
   const key = String(value || '').toLowerCase();
   if (key === 'red') return 'Критично';
   if (key === 'yellow') return 'Повышенная нагрузка';
-  return 'В норме';
+  return '';
 }
 
 function normalizeName(value) {
@@ -1773,7 +1875,12 @@ function getQuarter(date) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
 }
 
 function truncateText(value, max) {

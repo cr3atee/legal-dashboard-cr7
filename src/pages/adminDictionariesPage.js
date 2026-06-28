@@ -3,6 +3,8 @@ const DICTIONARY_CATEGORIES = [
   ['claim_subject', 'Предметы спора'],
   ['case_party', 'Истцы и ответчики'],
   ['procedural_position', 'Процессуальные положения'],
+  ['appeal_act_type', 'Типы судебных актов'],
+  ['appeal_type', 'Виды обжалования'],
   ['court', 'Суды'],
   ['stage', 'Результаты рассмотрения'],
   ['requirements', 'Требования'],

@@ -328,6 +328,38 @@ function markerRows(caseRows) {
   return [...counts.entries()].map(([label, count]) => ({ label, count }));
 }
 
+function reportQuarterMonths(year, quarter) {
+  const startMonth = ((Number(quarter) || 1) - 1) * 3;
+  return [0, 1, 2].map(offset => {
+    const date = new Date(year, startMonth + offset, 1);
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      label: new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(date)
+    };
+  });
+}
+
+function monthlyInflowRows(caseRows, year, quarter) {
+  return reportQuarterMonths(year, quarter).map(item => {
+    const count = caseRows.filter(row => {
+      const date = parseDate(row.event_date || row.created_at);
+      if (!date) return false;
+      const reportPeriod = periodOf(row.event_date || row.created_at);
+      const reportMonth = reportPeriod.quarter === 1 && date.getMonth() === 11 && date.getDate() >= 30
+        ? 1
+        : date.getMonth() + 1;
+      return reportPeriod.year === year && reportPeriod.quarter === quarter && reportMonth === item.month;
+    }).length;
+    return {
+      year: item.year,
+      month: item.month,
+      label: item.label,
+      count
+    };
+  });
+}
+
 function appealBreakdown(rows) {
   const map = new Map();
   for (const row of rows) {
@@ -375,6 +407,7 @@ async function summary(dbPath, { year, quarter, reportDate, scopeNames }) {
     },
     day_hearings: await dayHearings(dbPath, reportDate, scopeNames),
     executor_report: executorRows(cases, ytdCases),
+    monthly_inflow: monthlyInflowRows(cases, year, quarter),
     category_subject_rows: categoryRows(cases),
     marker_distribution: markers,
     department_totals: {

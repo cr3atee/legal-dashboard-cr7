@@ -293,7 +293,7 @@ function renderStructure(root, model) {
   const chart = root.querySelector('[data-reports-structure-chart]');
   const subjects = root.querySelector('[data-reports-subject-breakdown]');
   const table = root.querySelector('[data-reports-structure-rows]');
-  if (!chart || !subjects || !table) return;
+  if (!chart || !table) return;
 
   const sortMode = root.querySelector('[data-reports-structure-sort]')?.value === 'category' ? 'category' : 'count';
   const grouped = new Map();
@@ -313,7 +313,7 @@ function renderStructure(root, model) {
   if (!rows.length) {
     const empty = '<div class="reports-empty reports-empty-wide">Нет данных по структуре дел за выбранный период.</div>';
     chart.innerHTML = empty;
-    subjects.innerHTML = empty;
+    if (subjects) subjects.innerHTML = '';
     table.innerHTML = '<tr><td colspan="5">Нет данных для таблицы структуры дел за выбранный период.</td></tr>';
     return;
   }
@@ -331,12 +331,14 @@ function renderStructure(root, model) {
   `).join('');
 
   const initialCategory = displayCategories[0]?.[0] || rows[0].category;
-  renderSubjects(subjects, rows, initialCategory);
+  if (subjects) {
+    subjects.hidden = true;
+    subjects.innerHTML = '';
+  }
   chart.querySelectorAll('[data-quarter-category]').forEach(button => {
     button.addEventListener('click', event => {
       event.stopPropagation();
       chart.querySelectorAll('[data-quarter-category]').forEach(item => item.classList.toggle('active', item === button));
-      renderSubjects(subjects, rows, button.dataset.quarterCategory || '');
     });
   });
 

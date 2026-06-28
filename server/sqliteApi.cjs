@@ -211,8 +211,9 @@ function initializeSchema(dbPath) {
     db.run(`CREATE TABLE IF NOT EXISTS calendar_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date_str TEXT, user_name TEXT, task_type TEXT, description TEXT, time_val TEXT, court TEXT, subject TEXT, assignment TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP, meeting_id INTEGER, general_case_id INTEGER
+      metadata_json TEXT DEFAULT '{}', created_at TEXT DEFAULT CURRENT_TIMESTAMP, meeting_id INTEGER, general_case_id INTEGER
     )`);
+    db.run(`ALTER TABLE calendar_tasks ADD COLUMN metadata_json TEXT DEFAULT '{}'`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS enforcement_proceedings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,7 +245,11 @@ function initializeSchema(dbPath) {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
 
-    db.run(`CREATE TABLE IF NOT EXISTS app_options (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, value TEXT NOT NULL, UNIQUE(category,value))`);
+    db.run(`CREATE TABLE IF NOT EXISTS app_options (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, value TEXT NOT NULL, code TEXT DEFAULT '', system_flag INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 999, UNIQUE(category,value))`);
+    db.run(`ALTER TABLE app_options ADD COLUMN code TEXT DEFAULT ''`, () => {});
+    db.run(`ALTER TABLE app_options ADD COLUMN system_flag INTEGER DEFAULT 0`, () => {});
+    db.run(`ALTER TABLE app_options ADD COLUMN sort_order INTEGER DEFAULT 999`, () => {});
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_options_category_code ON app_options(category, code) WHERE code <> ''`, () => {});
     [
       ['case_category', 'Жилищные споры'],
       ['case_category', 'Благоустройство'],
@@ -255,9 +260,24 @@ function initializeSchema(dbPath) {
       ['procedural_position', 'Заинтересованное лицо'],
       ['procedural_position', 'Третье лицо с самостоятельными требованиями'],
       ['procedural_position', 'Третье лицо без самостоятельных требований'],
-      ['procedural_position', 'Прокурор']
+      ['procedural_position', 'Прокурор'],
+      ['appeal_act_type', 'Решение суда первой инстанции'],
+      ['appeal_act_type', 'Судебный акт суда апелляционной инстанции'],
+      ['appeal_act_type', 'Судебный акт суда кассационной инстанции'],
+      ['appeal_act_type', 'Судебный приказ'],
+      ['appeal_act_type', 'Заочное решение'],
+      ['appeal_act_type', 'Определение (промежуточное)']
     ].forEach(([category, value]) => {
       db.run('INSERT OR IGNORE INTO app_options (category, value) VALUES (?, ?)', [category, value], () => {});
+    });
+    [
+      ['appeal', 'Апелляционная инстанция', 10],
+      ['cassation', 'Кассационная инстанция', 20],
+      ['cassation_transfer_refusal', 'Жалоба на определение об отказе в передаче КЖ', 30],
+      ['cassation_supreme_court', 'Кассационная инстанция (ВС РФ)', 40]
+    ].forEach(([code, value, sortOrder]) => {
+      db.run('INSERT OR IGNORE INTO app_options (category, value, code, system_flag, sort_order) VALUES (?, ?, ?, 1, ?)', ['appeal_type', value, code, sortOrder], () => {});
+      db.run('UPDATE app_options SET code=?, system_flag=1, sort_order=? WHERE category=? AND (code=? OR value=?)', [code, sortOrder, 'appeal_type', code, value], () => {});
     });
     db.run(`CREATE TABLE IF NOT EXISTS archive (id INTEGER PRIMARY KEY AUTOINCREMENT, table_name TEXT NOT NULL, record_id INTEGER, data TEXT NOT NULL, archived_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
 
@@ -584,6 +604,7 @@ db.run(`CREATE TABLE IF NOT EXISTS meeting_participants (
     db.run(`CREATE TABLE IF NOT EXISTS general_case_review_approvals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       general_case_id INTEGER NOT NULL,
+      document_id TEXT DEFAULT '',
       document_path TEXT NOT NULL,
       document_name TEXT DEFAULT '',
       document_type TEXT DEFAULT '',
@@ -600,7 +621,9 @@ db.run(`CREATE TABLE IF NOT EXISTS meeting_participants (
       completed_at TEXT DEFAULT '',
       UNIQUE(general_case_id, document_path)
     )`);
+    db.run(`ALTER TABLE general_case_review_approvals ADD COLUMN document_id TEXT DEFAULT ''`, () => {});
     db.run(`CREATE INDEX IF NOT EXISTS idx_general_case_review_approvals_case ON general_case_review_approvals(general_case_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_general_case_review_approvals_document_id ON general_case_review_approvals(document_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_general_case_review_approvals_status ON general_case_review_approvals(status)`);
 
     });
@@ -910,6 +933,20 @@ async function listUsersForAdmin(dbPath) {
   return result;
 }
 
+async function listCalendarExecutorUsers(dbPath) {
+  const rows = await all(dbPath, `
+    SELECT id, full_name
+    FROM users
+    WHERE COALESCE(is_active, 1)=1
+      AND COALESCE(role_level, 1)=1
+    ORDER BY full_name COLLATE NOCASE, id
+  `, []);
+  return rows.map(row => ({
+    id: Number(row.id),
+    full_name: row.full_name || ''
+  })).filter(row => row.id && row.full_name);
+}
+
 async function isLastActiveTechAdmin(dbPath, userId) {
   const row = await get(dbPath, `
     SELECT COUNT(*) AS count
@@ -923,9 +960,9 @@ async function isLastActiveTechAdmin(dbPath, userId) {
 
 async function listDictionaryOptions(dbPath) {
   const options = await all(dbPath, `
-    SELECT id, category, value
+    SELECT id, category, value, COALESCE(code, '') AS code, COALESCE(system_flag, 0) AS system_flag, COALESCE(sort_order, 999) AS sort_order
     FROM app_options
-    ORDER BY category, value, id
+    ORDER BY category, sort_order, value, id
   `, []);
   const meetingParticipants = await all(dbPath, `
     SELECT id, category, full_name AS value, position, leadership, is_leadership, sort_order
@@ -934,7 +971,7 @@ async function listDictionaryOptions(dbPath) {
     ORDER BY category, sort_order, full_name, id
   `, []).catch(() => []);
   return options
-    .map(row => ({ id: String(row.id), category: row.category, value: row.value }))
+    .map(row => ({ id: String(row.id), category: row.category, value: row.value, code: row.code || '', system_flag: Number(row.system_flag || 0), sort_order: row.sort_order ?? 999 }))
     .concat(meetingParticipants.map(row => ({
       id: `meeting:${row.id}`,
       category: row.category,
@@ -956,6 +993,15 @@ function parseAdminDictionaryId(value) {
   if (!raw) return { type: 'option', id: 0 };
   if (raw.startsWith('meeting:')) return { type: 'meeting', id: Number(raw.slice('meeting:'.length) || 0) };
   return { type: 'option', id: Number(raw || 0) };
+}
+
+function normalizeDictionaryOptionValue(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('ru-RU');
+}
+
+function makeDictionaryOptionCode(category, value) {
+  if (category !== 'appeal_type') return '';
+  return `custom_${normalizeDictionaryOptionValue(value).replace(/[^a-zа-я0-9]+/g, '_').replace(/^_+|_+$/g, '') || Date.now()}`;
 }
 
 async function getMeetingParticipantDictionaryRow(dbPath, id) {
@@ -1415,8 +1461,16 @@ async function buildReportsSummary(dbPath, scope, year, quarter, reportDate = ne
   `, []).catch(() => [])).filter(row => ownerFilter(row));
   const todayHearings = scheduleRows.filter(row => isReportDateToday(row.session_date || row.hearing_date, now));
 
+  const controlledSeen = new Set();
   const controlledRows = (await all(dbPath, 'SELECT * FROM controlled_cases ORDER BY id DESC LIMIT 10000', []).catch(() => []))
-    .filter(row => ownerFilter(row));
+    .filter(row => ownerFilter(row))
+    .filter(row => isReportDateToday(row.updated_at || row.created_at, now))
+    .filter(row => {
+      const key = String(row.general_case_id || row.id || '').trim();
+      if (!key || controlledSeen.has(key)) return false;
+      controlledSeen.add(key);
+      return true;
+    });
 
   const taskRows = (await all(dbPath, `
     SELECT
@@ -1853,6 +1907,9 @@ function normCalendarTask(data = {}) {
     assignment: anyValue(data, ['assignment'], ''),
     note_text: anyValue(data, ['note_text'], ''),
     private_note: anyValue(data, ['private_note'], ''),
+    metadata_json: typeof data.metadata_json === 'string'
+      ? data.metadata_json
+      : JSON.stringify(data.metadata || {}),
     delegated_to: anyValue(data, ['delegated_to'], ''),
     delegated_by: anyValue(data, ['delegated_by'], ''),
     delegation_status: anyValue(data, ['delegation_status'], ''),
@@ -2019,14 +2076,21 @@ function normalizeApprovalStatus(status = '') {
 function approvalResponse(row = {}) {
   return {
     ...row,
+    documentId: row.document_id || '',
     status: normalizeApprovalStatus(row.status),
     history: parseJsonArraySafe(row.history_json)
   };
 }
 
-function findReviewDocument(documents = [], documentPath = '', documentIndex = null) {
+function findReviewDocument(documents = [], options = {}) {
+  const documentId = String(options.documentId || options.document_id || '').trim();
+  if (documentId) {
+    const byId = documents.find(doc => String(doc.id || doc.document_id || '').trim() === documentId);
+    if (byId) return byId;
+  }
+  const documentIndex = options.documentIndex ?? options.document_index;
   if (Number.isInteger(documentIndex) && documents[documentIndex]) return documents[documentIndex];
-  const targetPath = String(documentPath || '').trim();
+  const targetPath = String(options.documentPath || options.document_path || '').trim();
   if (targetPath) {
     return documents.find(doc => String(doc.path || '').trim() === targetPath) || null;
   }
@@ -2166,7 +2230,7 @@ async function buildUserNotifications(dbPath, session) {
   for (const row of approvalRows) {
     const status = normalizeApprovalStatus(row.status);
     const caseLabel = notificationCaseLabel(row);
-    const documentName = row.document_name || 'document';
+    const documentName = row.document_name || 'документ';
     const isReviewerTask = status === 'pending' && canReviewGeneralCaseApproval(session);
     const isRequesterTask = isSameUserName(row.requester_name, userName);
     if (!isReviewerTask && !isRequesterTask) continue;
@@ -2175,15 +2239,25 @@ async function buildUserNotifications(dbPath, session) {
       status: status === 'pending' || status === 'revision_required' ? 'active' : 'done',
       severity: 'review',
       title: status === 'pending'
-        ? 'Review approval requested'
-        : (status === 'revision_required' ? 'Review requires revision' : 'Review approved'),
+        ? 'Отзыв ожидает согласования'
+        : (status === 'revision_required' ? 'Отзыв требует доработки' : 'Отзыв согласован'),
       message: status === 'pending'
-        ? `${row.requester_name || 'User'} requests review approval for ${caseLabel}: ${documentName}.`
-        : `Review for ${caseLabel}: ${documentName} changed status to ${status}.`,
+        ? `${row.requester_name || 'Сотрудник'} направил(а) документ «${documentName}» на согласование по делу ${caseLabel}.`
+        : `Статус документа «${documentName}» по делу ${caseLabel}: ${status === 'revision_required' ? 'требуется доработка' : 'согласовано'}.`,
       due_at: row.updated_at || row.created_at || new Date().toISOString(),
       source_type: 'general_case_review_approval',
       source_id: row.id,
       general_case_id: row.general_case_id || null,
+      type: 'review_approval_request',
+      caseId: row.general_case_id || null,
+      documentId: row.document_id || '',
+      approvalRequestId: row.id,
+      metadata: {
+        type: 'review_approval_request',
+        caseId: row.general_case_id || null,
+        documentId: row.document_id || '',
+        approvalRequestId: row.id
+      },
       approval_status: status
     });
   }
@@ -2605,10 +2679,11 @@ if (meetingsMatchSourcePort) {
       const body = await readBody(req);
       const parsedId = parseAdminDictionaryId(body.id);
       const category = String(body.category || '').trim();
-      const value = String(body.value || '').trim();
+      const value = String(body.value || '').trim().replace(/\s+/g, ' ');
       const position = String(body.position || '').trim();
       const leadership = String(body.leadership || '').trim();
       const isLeadership = Number(body.is_leadership ?? 1) ? 1 : 0;
+      const sortOrder = Number.isFinite(Number(body.sort_order)) ? Number(body.sort_order) : 999;
       if (!category || !value) {
         sendJson(res, 400, { error: 'category_and_value_required' });
         return true;
@@ -2649,20 +2724,33 @@ if (meetingsMatchSourcePort) {
           sendJson(res, 400, { error: 'invalid_option_id' });
           return true;
         }
-        const existing = await get(dbPath, 'SELECT id FROM app_options WHERE id=?', [parsedId.id]);
+        const existing = await get(dbPath, 'SELECT id, category, code, system_flag, sort_order FROM app_options WHERE id=?', [parsedId.id]);
         if (!existing) {
           sendJson(res, 404, { error: 'option_not_found' });
           return true;
         }
-        await run(dbPath, 'UPDATE app_options SET category=?, value=? WHERE id=?', [category, value, parsedId.id]);
-        const row = await get(dbPath, 'SELECT id, category, value FROM app_options WHERE id=?', [parsedId.id]);
+        const duplicate = (await all(dbPath, "SELECT id, value FROM app_options WHERE category=? AND id<>?", [category, parsedId.id]).catch(() => []))
+          .find(row => normalizeDictionaryOptionValue(row.value) === normalizeDictionaryOptionValue(value));
+        if (duplicate) {
+          sendJson(res, 409, { error: 'option_duplicate' });
+          return true;
+        }
+        await run(dbPath, 'UPDATE app_options SET category=?, value=?, sort_order=? WHERE id=?', [category, value, sortOrder, parsedId.id]);
+        const row = await get(dbPath, 'SELECT id, category, value, COALESCE(code, "") AS code, COALESCE(system_flag, 0) AS system_flag, COALESCE(sort_order, 999) AS sort_order FROM app_options WHERE id=?', [parsedId.id]);
         sendJson(res, 200, { ...row, id: String(row.id) });
         return true;
       }
-      const result = await run(dbPath, 'INSERT OR IGNORE INTO app_options (category, value) VALUES (?, ?)', [category, value]);
+      const duplicate = (await all(dbPath, "SELECT id, category, value FROM app_options WHERE category=?", [category]).catch(() => []))
+        .find(row => normalizeDictionaryOptionValue(row.value) === normalizeDictionaryOptionValue(value));
+      if (duplicate) {
+        sendJson(res, 409, { error: 'option_duplicate' });
+        return true;
+      }
+      const optionCode = makeDictionaryOptionCode(category, value);
+      const result = await run(dbPath, 'INSERT OR IGNORE INTO app_options (category, value, code, sort_order) VALUES (?, ?, ?, ?)', [category, value, optionCode, sortOrder]);
       const row = result.changes
-        ? await get(dbPath, 'SELECT id, category, value FROM app_options WHERE id=?', [result.id])
-        : await get(dbPath, 'SELECT id, category, value FROM app_options WHERE category=? AND value=?', [category, value]);
+        ? await get(dbPath, 'SELECT id, category, value, COALESCE(code, "") AS code, COALESCE(system_flag, 0) AS system_flag, COALESCE(sort_order, 999) AS sort_order FROM app_options WHERE id=?', [result.id])
+        : await get(dbPath, 'SELECT id, category, value, COALESCE(code, "") AS code, COALESCE(system_flag, 0) AS system_flag, COALESCE(sort_order, 999) AS sort_order FROM app_options WHERE category=? AND value=?', [category, value]);
       sendJson(res, result.changes ? 201 : 200, { ...row, id: String(row.id) });
       return true;
     }
@@ -2686,12 +2774,16 @@ if (meetingsMatchSourcePort) {
       }
 
       const id = parsedId.id;
-      const option = await get(dbPath, 'SELECT id, category, value FROM app_options WHERE id=?', [id]);
+      const option = await get(dbPath, 'SELECT id, category, value, COALESCE(system_flag, 0) AS system_flag FROM app_options WHERE id=?', [id]);
       if (!option) {
         sendJson(res, 404, { error: 'option_not_found' });
         return true;
       }
-      if (await isOptionValueUsed(dbPath, option.category, option.value)) {
+      if (option.category === 'appeal_type' && Number(option.system_flag || 0) === 1) {
+        sendJson(res, 409, { error: 'system_option_protected' });
+        return true;
+      }
+      if (option.category !== 'appeal_type' && await isOptionValueUsed(dbPath, option.category, option.value)) {
         sendJson(res, 409, { error: 'option_in_use' });
         return true;
       }
@@ -2902,6 +2994,20 @@ if (meetingsMatchSourcePort) {
       return true;
     }
 
+    if (path === '/api/calendar-users' && req.method === 'GET') {
+      const session = await getRequestSession(req, dbPath);
+      if (!session) {
+        sendJson(res, 401, { error: 'auth_required' });
+        return true;
+      }
+      if (Number(session.role_level || 0) < 2) {
+        sendJson(res, 403, { error: 'forbidden' });
+        return true;
+      }
+      sendJson(res, 200, await listCalendarExecutorUsers(dbPath));
+      return true;
+    }
+
     if (path === '/api/notifications' && req.method === 'GET') {
       const session = await getRequestSession(req, dbPath);
       if (!session) {
@@ -2941,6 +3047,11 @@ if (meetingsMatchSourcePort) {
 
     if (path === '/api/options' && req.method === 'GET') {
       const category = parsedUrl.searchParams.get('category') || '';
+      if (category === 'appeal_type') {
+        const rows = await all(dbPath, 'SELECT id, value, COALESCE(code, "") AS code, COALESCE(system_flag, 0) AS system_flag, COALESCE(sort_order, 999) AS sort_order FROM app_options WHERE category=? ORDER BY sort_order, value, id', [category]);
+        sendJson(res, 200, rows.map(row => ({ ...row, id: String(row.id), system_flag: Number(row.system_flag || 0) })));
+        return true;
+      }
       const rows = await all(dbPath, 'SELECT value FROM app_options WHERE category=? ORDER BY value', [category]);
       sendJson(res, 200, rows.map(r => r.value)); return true;
     }
@@ -3118,45 +3229,81 @@ if (meetingsMatchSourcePort) {
         return true;
       }
       if (Number(row.review_show_flag || 0) !== 1) {
-        sendJson(res, 400, { error: 'review_flag_required', message: 'Review approval is available only for cases marked as review.' });
+        sendJson(res, 400, { error: 'review_flag_required', message: 'Согласование доступно только для дел с пометкой «Отзыв показать».' });
         return true;
       }
       const documents = parseJsonArraySafe(row.documents_json);
       const requestedIndex = Number(body.document_index);
-      const doc = findReviewDocument(
-        documents,
-        body.document_path,
-        Number.isInteger(requestedIndex) ? requestedIndex : null
-      );
+      const documentId = String(body.documentId || body.document_id || '').trim();
+      const doc = findReviewDocument(documents, {
+        documentId,
+        documentPath: body.document_path,
+        documentIndex: Number.isInteger(requestedIndex) ? requestedIndex : null
+      });
       if (!doc || !String(doc.path || '').trim()) {
-        sendJson(res, 400, { error: 'review_document_required', message: 'Attach a review document before sending approval request.' });
+        sendJson(res, 400, { error: 'review_document_required', message: 'Перед отправкой на согласование прикрепите и сохраните документ «Отзыв».' });
         return true;
       }
-      const reviewer = String(body.reviewer_name || '').trim()
+      const savedDocumentId = String(doc.id || doc.document_id || '').trim();
+      if (documentId && savedDocumentId !== documentId) {
+        sendJson(res, 400, { error: 'document_not_found', message: 'Документ не найден в сохранённой карточке дела.' });
+        return true;
+      }
+      if (!savedDocumentId) {
+        sendJson(res, 400, { error: 'document_id_required', message: 'Сначала сохраните документ в карточке дела, затем отправьте его на согласование.' });
+        return true;
+      }
+      if (!/отзыв|review/i.test(String(`${doc.type || ''} ${doc.name || ''}`))) {
+        sendJson(res, 400, { error: 'review_document_type_required', message: 'Согласование доступно только для документа «Отзыв».' });
+        return true;
+      }
+      const approverId = Number(body.approverId || body.approver_id || 0);
+      const approverById = approverId
+        ? await get(dbPath, 'SELECT full_name FROM users WHERE id=? AND COALESCE(is_active,1)=1 LIMIT 1', [approverId]).catch(() => null)
+        : null;
+      const reviewer = String(approverById?.full_name || body.reviewer_name || '').trim()
         || (await get(dbPath, 'SELECT full_name FROM users WHERE COALESCE(is_active,1)=1 AND COALESCE(role_level,1)>=3 ORDER BY role_level DESC, id ASC LIMIT 1').catch(() => null))?.full_name
         || '';
+      if (!reviewer) {
+        sendJson(res, 400, { error: 'approver_required', message: 'Не удалось определить согласующего.' });
+        return true;
+      }
       const now = new Date().toISOString();
-      const existing = await get(dbPath, 'SELECT * FROM general_case_review_approvals WHERE general_case_id=? AND document_path=? LIMIT 1', [id, doc.path]);
+      const existing = await get(dbPath, `
+        SELECT * FROM general_case_review_approvals
+        WHERE general_case_id=?
+          AND (document_id=? OR (?<>'' AND document_path=?))
+        LIMIT 1
+      `, [id, savedDocumentId, doc.path || '', doc.path || '']);
       const comment = String(body.comment || '').trim();
       if (existing) {
+        const existingStatus = normalizeApprovalStatus(existing.status);
+        if (existingStatus === 'pending') {
+          sendJson(res, 409, { error: 'approval_already_pending', message: 'Документ уже отправлен на согласование.' });
+          return true;
+        }
+        if (existingStatus === 'approved' || existingStatus === 'completed') {
+          sendJson(res, 409, { error: 'approval_already_finished', message: 'Документ уже согласован.' });
+          return true;
+        }
         const historyJson = appendApprovalHistory(existing, 'request', session.full_name, comment);
         await run(dbPath, `
           UPDATE general_case_review_approvals
-          SET document_name=?, document_type=?, requester_name=?, reviewer_name=?, status='pending',
+          SET document_id=?, document_path=?, document_name=?, document_type=?, requester_name=?, reviewer_name=?, status='pending',
               request_comment=?, history_json=?, updated_at=?, approved_at='', completed_at=''
           WHERE id=?
-        `, [doc.name || '', doc.type || '', session.full_name, reviewer, comment, historyJson, now, existing.id]);
+        `, [savedDocumentId, doc.path || '', doc.name || '', doc.type || '', session.full_name, reviewer, comment, historyJson, now, existing.id]);
         sendJson(res, 200, approvalResponse(await get(dbPath, 'SELECT * FROM general_case_review_approvals WHERE id=?', [existing.id])));
         return true;
       }
       const historyJson = stringifyHistory([{ action: 'request', actor: session.full_name, comment, at: now }]);
       const result = await run(dbPath, `
         INSERT INTO general_case_review_approvals (
-          general_case_id, document_path, document_name, document_type, requester_name,
+          general_case_id, document_id, document_path, document_name, document_type, requester_name,
           reviewer_name, status, request_comment, history_json, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
-      `, [id, doc.path, doc.name || '', doc.type || '', session.full_name, reviewer, comment, historyJson, now, now]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+      `, [id, savedDocumentId, doc.path, doc.name || '', doc.type || '', session.full_name, reviewer, comment, historyJson, now, now]);
       sendJson(res, 201, approvalResponse(await get(dbPath, 'SELECT * FROM general_case_review_approvals WHERE id=?', [result.id])));
       return true;
     }
@@ -3197,7 +3344,7 @@ if (meetingsMatchSourcePort) {
       } else if (action === 'court-sent') {
         if (!isRequester && !isReviewer) { sendJson(res, 403, { error: 'forbidden' }); return true; }
         if (normalizeApprovalStatus(approval.status) !== 'approved') {
-          sendJson(res, 409, { error: 'approval_required', message: 'Review must be approved before court sending status.' });
+          sendJson(res, 409, { error: 'approval_required', message: 'Перед отметкой отправки в суд документ «Отзыв» должен быть согласован.' });
           return true;
         }
         nextStatus = 'completed';
@@ -3949,6 +4096,7 @@ if (emergencyMatch) {
       const start = parsedUrl.searchParams.get('start') || '';
       const end = parsedUrl.searchParams.get('end') || '';
       const requestedUser = parsedUrl.searchParams.get('user') || '';
+      const requestedScope = parsedUrl.searchParams.get('scope') || '';
       const generalCaseId = Number(parsedUrl.searchParams.get('general_case_id') || 0);
       const effectiveUser = hasPermission(session, PERMISSIONS.CALENDAR_VIEW_ANY) ? requestedUser : session.full_name;
 
@@ -3980,6 +4128,10 @@ if (emergencyMatch) {
         params.push(generalCaseId);
       }
 
+      if (requestedScope === 'work') {
+        where.push(`COALESCE(event_scope, 'work')<>'personal'`);
+      }
+
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
       const rows = await all(dbPath, `
@@ -4004,6 +4156,7 @@ if (emergencyMatch) {
           assignment,
           COALESCE(note_text, '') AS note_text,
           COALESCE(private_note, '') AS private_note,
+          COALESCE(metadata_json, '{}') AS metadata_json,
           COALESCE(delegated_to, '') AS delegated_to,
           COALESCE(delegated_by, '') AS delegated_by,
           COALESCE(delegation_status, '') AS delegation_status,
@@ -4043,13 +4196,13 @@ if (emergencyMatch) {
       const result = await run(dbPath, `
         INSERT INTO calendar_tasks (
           date_str, "date", end_date, user_name, "user", task_type, "type", event_scope, personal_kind,
-          description, "desc", time_val, "time", end_time, court, subject, assignment, note_text, private_note,
+          description, "desc", time_val, "time", end_time, court, subject, assignment, note_text, private_note, metadata_json,
           delegated_to, delegated_by, delegation_status, delegation_source_event_id, conflict_override, done, meeting_id, general_case_id, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         d.date, d.date, d.end_date, d.user, d.user, d.type, d.type, d.event_scope, d.personal_kind,
-        d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note,
+        d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note, d.metadata_json,
         d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id,
         now, now
       ]);
@@ -4122,12 +4275,12 @@ if (emergencyMatch) {
         await run(dbPath, `
           UPDATE calendar_tasks
           SET date_str=?, "date"=?, end_date=?, user_name=?, "user"=?, task_type=?, "type"=?, event_scope=?, personal_kind=?,
-              description=?, "desc"=?, time_val=?, "time"=?, end_time=?, court=?, subject=?, assignment=?, note_text=?, private_note=?,
+              description=?, "desc"=?, time_val=?, "time"=?, end_time=?, court=?, subject=?, assignment=?, note_text=?, private_note=?, metadata_json=?,
               delegated_to=?, delegated_by=?, delegation_status=?, delegation_source_event_id=?, conflict_override=?, done=?, meeting_id=?, general_case_id=?, updated_at=?
           WHERE id=?
         `, [
           d.date, d.date, d.end_date, d.user, d.user, d.type, d.type, d.event_scope, d.personal_kind,
-          d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note,
+          d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note, d.metadata_json,
           d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id,
           new Date().toISOString(), id
         ]);
