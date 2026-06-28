@@ -114,7 +114,7 @@ function updateSuggestions(target) {
     .map(value => ({ value, score: score(value, query) }))
     .filter(item => item.score < 9)
     .sort((a, b) => a.score - b.score || a.value.localeCompare(b.value, 'ru'))
-    .slice(0, 14);
+    .slice(0, 8);
   if (!matches.length) {
     hide();
     return;
