@@ -85,6 +85,15 @@ function renderLoginScreen(onAuthenticated) {
           </label>
 
           <div class="login-error" id="loginStatus" data-login-error role="status" aria-live="polite" hidden></div>
+          <div class="login-success-lock" data-login-success-lock role="status" aria-label="Доступ подтверждён" hidden>
+            <svg viewBox="0 0 72 72" aria-hidden="true" focusable="false">
+              <circle class="login-success-lock-ring" cx="36" cy="36" r="31" />
+              <path class="login-success-lock-shackle" d="M25 34v-7a11 11 0 0 1 22 0v7" />
+              <rect class="login-success-lock-body" x="21" y="32" width="30" height="25" rx="8" />
+              <circle class="login-success-lock-key" cx="36" cy="44" r="3" />
+              <path class="login-success-lock-stem" d="M36 47v5" />
+            </svg>
+          </div>
 
           <button class="btn primary login-submit" type="submit">Войти</button>
         </form>
@@ -139,9 +148,8 @@ function renderLoginScreen(onAuthenticated) {
 
     try {
       const session = await dbApi.login(password);
-      setLoginState(card, errorNode, lock, visual, 'success', 'Доступ подтверждён.');
-      await visual.showSuccessText(APP_DISPLAY_NAME);
-      await delay(160);
+      setLoginState(card, errorNode, lock, visual, 'success');
+      await delay(1050);
       setAuthSession(session);
       visual.destroy();
       onAuthenticated(session);
@@ -219,10 +227,14 @@ function setLoginState(card, errorNode, lock, visual, state, message = '') {
   if (card) card.dataset.state = state;
   if (lock) lock.hidden = state === 'success';
 
+  const successLock = card?.querySelector('[data-login-success-lock]');
+  if (successLock) successLock.hidden = state !== 'success';
+
   if (errorNode) {
-    errorNode.textContent = message;
-    errorNode.hidden = !message;
-    errorNode.dataset.type = state === 'success' ? 'success' : state === 'error' ? 'error' : 'info';
+    const showMessage = Boolean(message) && state !== 'success';
+    errorNode.textContent = showMessage ? message : '';
+    errorNode.hidden = !showMessage;
+    errorNode.dataset.type = state === 'error' ? 'error' : 'info';
   }
 
   if (state !== 'success') visual.setState(state);
