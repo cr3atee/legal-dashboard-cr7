@@ -51,16 +51,7 @@ document.addEventListener('dblclick', event => {
   document.querySelector('[data-calendar-widget-delete-dialog]')?.showModal();
 });
 
-window.addEventListener('calendar:updated', event => {
-  const detail = event.detail || {};
-  if (Array.isArray(detail.tasks)) {
-    state.tasks = detail.tasks;
-    renderKanban();
-  } else {
-    loadKanbanWidget();
-  }
-});
-
+window.addEventListener('calendar:updated', loadKanbanWidget);
 window.addEventListener('calendar:reload', loadKanbanWidget);
 
 window.addEventListener('app:view-changed', event => {
@@ -71,16 +62,42 @@ window.addEventListener('app:view-changed', event => {
 async function loadKanbanWidget() {
   if (!document.querySelector('[data-calendar-kanban-widget]')) return;
 
+  const today = toIsoDate(new Date());
   const start = offsetIso(-370);
   const end = offsetIso(1);
+  const user = getCurrentUserName();
 
   try {
-    state.tasks = await dbApi.getCalendarTasks({ start, end, user: getCurrentUserName() });
+    const [rangeRows, todayRows] = await Promise.all([
+      dbApi.getCalendarTasks({ start, end, user }),
+      dbApi.getCalendarTasks({ date: today, user })
+    ]);
+
+    state.tasks = mergeTasks(rangeRows, todayRows);
     renderKanban();
   } catch {
     const board = document.querySelector('[data-calendar-kanban-board]');
     if (board) board.innerHTML = '<div class="muted">Данные загрузятся после открытия календаря.</div>';
   }
+}
+
+function mergeTasks(...groups) {
+  const result = [];
+  const seen = new Set();
+
+  for (const group of groups) {
+    for (const task of Array.isArray(group) ? group : []) {
+      const id = task.id ?? task.task_id;
+      const key = id != null
+        ? `id:${id}`
+        : `${getTaskDate(task)}|${getTaskTime(task)}|${getTaskDescription(task)}|${task.user_name || task.user || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(task);
+    }
+  }
+
+  return result;
 }
 
 function renderKanban() {
@@ -113,12 +130,16 @@ function buildColumns() {
   ];
 
   for (const task of state.tasks) {
-    if (isDone(task)) continue;
     const date = getTaskDate(task);
     if (!date) continue;
 
+    if (date === today) {
+      columns[0].tasks.push(task);
+      continue;
+    }
+
+    if (isDone(task)) continue;
     if (isOverdue(task, today)) columns[2].tasks.push(task);
-    else if (date === today) columns[0].tasks.push(task);
     else if (date === tomorrow) columns[1].tasks.push(task);
   }
 
@@ -131,14 +152,16 @@ function buildColumns() {
 
 function renderTaskCard(task) {
   const id = task.id ?? task.task_id;
+  const done = isDone(task);
   return `
-    <article class="calendar-widget-kanban-task" data-calendar-widget-kanban-task="${id}">
+    <article class="calendar-widget-kanban-task ${done ? 'is-done' : ''}" data-calendar-widget-kanban-task="${id}">
       <div class="calendar-widget-kanban-task-top">
         <b>${escapeHtml(getTaskTime(task) || formatRuDate(getTaskDate(task)))}</b>
         <span>${escapeHtml(getTaskType(task) || 'задача')}</span>
       </div>
       <strong>${escapeHtml(getTaskDescription(task) || task.assignment || task.subject || 'Без описания')}</strong>
       <p>${escapeHtml(task.court || task.subject || task.assignment || '')}</p>
+      ${done ? '<em>Исполнено</em>' : ''}
     </article>
   `;
 }
@@ -186,11 +209,27 @@ function isOverdue(task, today) {
   return taskTime < now;
 }
 
-function isDone(task) { return Number(task?.done || task?.is_done || 0) === 1 || String(task?.done).toLowerCase() === 'true'; }
-function getTaskDate(task) { return task?.date_str || task?.date || ''; }
-function getTaskTime(task) { return task?.time_val || task?.time || ''; }
+function isDone(task) {
+  if (Number(task?.done || task?.is_done || task?.completed || 0) === 1) return true;
+  const status = String(task?.status || '').toLocaleLowerCase('ru-RU').trim();
+  return ['done', 'completed', 'выполнено', 'исполнено'].includes(status)
+    || String(task?.done || '').toLowerCase() === 'true';
+}
+
+function getTaskDate(task) {
+  return normalizeDate(task?.date_str || task?.date || task?.start_date || task?.deadline || task?.event_date || '');
+}
+function getTaskTime(task) { return task?.time_val || task?.time || task?.start_time || ''; }
 function getTaskType(task) { return task?.task_type || task?.type || ''; }
-function getTaskDescription(task) { return task?.description || task?.desc || ''; }
+function getTaskDescription(task) { return task?.description || task?.desc || task?.title || ''; }
+
+function normalizeDate(value) {
+  const text = String(value || '').trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const ru = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  return ru ? `${ru[3]}-${ru[2].padStart(2, '0')}-${ru[1].padStart(2, '0')}` : '';
+}
 
 function offsetIso(offsetDays) {
   const date = new Date();
