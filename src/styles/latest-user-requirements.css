@@ -1,7 +1,7 @@
 #calendar .calendar-week-new-row { display:flex; align-items:flex-end; justify-content:flex-end; gap:10px; flex-wrap:wrap; position:relative; }
-#calendar [data-calendar-executor-control] { display:grid !important; gap:5px; min-width:280px; margin-left:28px; margin-right:auto; visibility:visible !important; opacity:1 !important; }
+#calendar [data-calendar-executor-control] { display:grid !important; min-width:280px; margin-left:28px; margin-right:auto; visibility:visible !important; opacity:1 !important; }
 #calendar [data-calendar-executor-control][hidden] { display:grid !important; }
-#calendar [data-calendar-executor-control] > span { font-size:12px; line-height:1; font-weight:800; color:#66758d; }
+#calendar [data-calendar-executor-control] > span { display:none !important; }
 #calendar [data-calendar-executor-control] select { display:block !important; width:100%; min-height:48px; border:1px solid #d7e1ee; border-radius:15px; padding:0 42px 0 15px; background:#fff; color:#1f2c45; font:inherit; font-weight:700; box-shadow:0 6px 18px rgba(28,52,91,.08); cursor:pointer; }
 #calendar [data-calendar-executor-control] select:hover { border-color:#8caef2; background:#f8fbff; }
 #calendar [data-calendar-executor-control] select:focus { outline:none; border-color:#2e5bd3; box-shadow:0 0 0 3px rgba(46,91,211,.12); }
