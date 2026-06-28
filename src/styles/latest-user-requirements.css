@@ -25,13 +25,26 @@
 #notificationsPanel .notifications-tabs {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:10px;
   min-width:0;
   flex:1 1 auto;
+}
+#notificationsPanel .notifications-tab {
+  min-width:150px;
+  min-height:48px;
+  padding:0 18px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  white-space:nowrap;
 }
 #notificationsPanel [data-notifications-mark-all] {
   flex:0 0 auto;
   align-self:center;
+  min-width:230px;
+  min-height:48px;
+  padding:0 20px;
   margin:0;
   white-space:nowrap;
 }
@@ -106,5 +119,7 @@
 @media (max-width:900px) {
   #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; }
   #notificationsPanel .notifications-toolbar { align-items:stretch; flex-wrap:wrap; }
-  #notificationsPanel [data-notifications-mark-all] { width:100%; }
+  #notificationsPanel .notifications-tabs { width:100%; }
+  #notificationsPanel .notifications-tab { flex:1 1 160px; min-width:0; }
+  #notificationsPanel [data-notifications-mark-all] { width:100%; min-width:0; }
 }
