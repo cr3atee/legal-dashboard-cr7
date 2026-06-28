@@ -1,5 +1,5 @@
 #calendar .calendar-week-new-row { display:flex; align-items:flex-end; justify-content:flex-end; gap:10px; flex-wrap:wrap; position:relative; }
-#calendar [data-calendar-executor-control] { display:grid !important; gap:5px; min-width:280px; margin-right:auto; visibility:visible !important; opacity:1 !important; }
+#calendar [data-calendar-executor-control] { display:grid !important; gap:5px; min-width:280px; margin-left:28px; margin-right:auto; visibility:visible !important; opacity:1 !important; }
 #calendar [data-calendar-executor-control][hidden] { display:grid !important; }
 #calendar [data-calendar-executor-control] > span { font-size:12px; line-height:1; font-weight:800; color:#66758d; }
 #calendar [data-calendar-executor-control] select { display:block !important; width:100%; min-height:48px; border:1px solid #d7e1ee; border-radius:15px; padding:0 42px 0 15px; background:#fff; color:#1f2c45; font:inherit; font-weight:700; box-shadow:0 6px 18px rgba(28,52,91,.08); cursor:pointer; }
@@ -12,4 +12,4 @@
 .latest-report-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .latest-report-dialog-body { display:grid; gap:8px; max-height:60vh; overflow-y:auto; margin-top:16px; }
 .latest-report-dialog-body button { display:grid; gap:5px; width:100%; border:1px solid #dbe5f1; border-radius:12px; padding:12px 14px; background:#f8faff; text-align:left; }
-@media (max-width:900px) { #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-right:0; } }
+@media (max-width:900px) { #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; } }
