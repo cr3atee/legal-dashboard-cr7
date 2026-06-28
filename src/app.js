@@ -25,7 +25,6 @@ import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDict
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
 import { initUtilityPanels } from './modules/utility/utilityPanelsController.js';
 import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
-import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
 import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
 import { initNotificationViewedTab } from './modules/workflow/notificationViewedTab.js';
 import { initParticipantCaseCreateGuard } from './modules/workflow/participantCaseCreateGuard.js';
@@ -34,43 +33,23 @@ import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
 
+const initializers = [
+  initAuthUi, initThemeUi, initSidebarCollapse, initRouter, initDashboard,
+  initCaseUiEnhancements, initAppealCalculatorUiFix, initAppealTaskDateBridge,
+  initAppealActionCleanup, initLegalFieldSuggestions, initParticipantCaseCreateGuard,
+  initGeneralCasesPage, initControlledCasesPage, initEnforcementPage,
+  initCalendarSelectedUserOnly, initCalendarPage, initSchedulePage,
+  initEmergencyFundPage, initMunicipalRegistryPage, initMeetingsPage,
+  initMeetingsWorkflowUi, initReportsPage, initReportsQuarterController,
+  initAdminUsersPage, initAdminDictionariesPage, initMapFullscreenButton,
+  initAssignmentNotificationOpen, initUtilityPanels, initNotificationViewedTab,
+  initUserRequestedEnhancements, initRoleUiPolicy, initCaseNumberAutoYear
+];
+
 export function initApp() {
   initAuthGate(session => {
     document.querySelector('#app').innerHTML = renderAppLayout(session);
-
-    initAuthUi();
-    initThemeUi();
-    initSidebarCollapse();
-    initRouter();
-    initDashboard();
-    initCaseUiEnhancements();
-    initAppealCalculatorUiFix();
-    initAppealTaskDateBridge();
-    initAppealActionCleanup();
-    initLegalFieldSuggestions();
-    initParticipantCaseCreateGuard();
-    initGeneralCasesPage();
-    initControlledCasesPage();
-    initEnforcementPage();
-    initCalendarSelectedUserOnly();
-    initCalendarPage();
-    initSchedulePage();
-    initEmergencyFundPage();
-    initMunicipalRegistryPage();
-    initMeetingsPage();
-    initMeetingsWorkflowUi();
-    initReportsPage();
-    initReportsQuarterController();
-    initAdminUsersPage();
-    initAdminDictionariesPage();
-    initMapFullscreenButton();
-    initAssignmentNotificationOpen();
-    initUtilityPanels();
-    initNotificationViewedTab();
-    initUserRequestedEnhancements();
-    initLatestUserRequirements();
-    initRoleUiPolicy();
-    initCaseNumberAutoYear();
+    for (const initialize of initializers) initialize();
   });
 }
 
@@ -82,10 +61,7 @@ function initCaseNumberAutoYear() {
     if (!(input instanceof HTMLInputElement)) return;
     const name = String(input.name || '').toLowerCase();
     const label = input.closest('label')?.textContent?.toLowerCase() || '';
-    const isPkField = name === 'case_no' || name === 'pk_number' || name === 'case_number' || label.includes('№ пк');
-    if (!isPkField) return;
-    const value = String(input.value || '');
-    if (!value.endsWith('/')) return;
-    input.value = `${value}${new Date().getFullYear()}`;
+    if (!['case_no', 'pk_number', 'case_number'].includes(name) && !label.includes('№ пк')) return;
+    if (String(input.value || '').endsWith('/')) input.value += new Date().getFullYear();
   });
 }
