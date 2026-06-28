@@ -29,6 +29,7 @@ import { initUserRequestedEnhancements } from './modules/workflow/userRequestedE
 import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
 import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
 import { initNotificationViewedTab } from './modules/workflow/notificationViewedTab.js';
+import { initParticipantCaseCreateGuard } from './modules/workflow/participantCaseCreateGuard.js';
 import { initRoleUiPolicy } from './modules/workflow/roleUiPolicy.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
@@ -48,6 +49,7 @@ export function initApp() {
     initAppealTaskDateBridge();
     initAppealActionCleanup();
     initLegalFieldSuggestions();
+    initParticipantCaseCreateGuard();
     initGeneralCasesPage();
     initControlledCasesPage();
     initEnforcementPage();
