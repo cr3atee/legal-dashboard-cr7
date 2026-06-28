@@ -30,7 +30,7 @@ async function refresh() {
   const today = isoToday();
   let rows = [];
   try {
-    rows = await dbApi.getCalendarTasks({ start: today, end: today, user: getCurrentUserName() });
+    rows = await dbApi.getCalendarTasks({ date: today, user: getCurrentUserName() });
   } catch {
     return;
   }
