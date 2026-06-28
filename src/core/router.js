@@ -2,6 +2,8 @@ import { setSidebarCollapsed } from '../layout/sidebarCollapse.js';
 import { initMap, invalidateMapSize } from '../modules/map/mapInit.js';
 import { canViewRoute } from './permissions.js';
 
+const TEMPORARILY_HIDDEN_VIEWS = new Set(['map']);
+
 const VIEW_PATHS = {
   dashboard: '/',
   cases: '/cases',
@@ -39,7 +41,7 @@ export function initRouter() {
 }
 
 export function openView(viewId, options = {}) {
-  if (!canViewRoute(viewId)) {
+  if (TEMPORARILY_HIDDEN_VIEWS.has(viewId) || !canViewRoute(viewId)) {
     const fallbackView = canViewRoute('dashboard') ? 'dashboard' : document.querySelector('.view')?.id;
     if (fallbackView && fallbackView !== viewId) {
       openView(fallbackView, { updateHistory: true, replaceHistory: true });
@@ -60,7 +62,6 @@ export function openView(viewId, options = {}) {
   updateBrowserRoute(viewId, options);
   window.dispatchEvent(new CustomEvent('app:view-changed', { detail: { viewId } }));
 
-  // One sidebar behavior for every view: compact by default, expanded by hover/focus.
   setSidebarCollapsed(true);
 
   if (viewId !== 'dashboard' && typeof window.setDashboardEditMode === 'function') {
@@ -79,7 +80,8 @@ window.openView = openView;
 
 function getViewFromLocation() {
   const path = normalizePath(window.location.pathname);
-  return PATH_VIEWS[path] || 'dashboard';
+  const view = PATH_VIEWS[path] || 'dashboard';
+  return TEMPORARILY_HIDDEN_VIEWS.has(view) ? 'dashboard' : view;
 }
 
 function normalizePath(pathname) {
