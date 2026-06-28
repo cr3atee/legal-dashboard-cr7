@@ -12,14 +12,14 @@ export function initReportsCalendarDetails() {
   const root = document.querySelector('[data-reports-root]');
   if (!root) return;
 
-  const schedule = () => {
+  const schedule = (delay = 220) => {
     if (applying) return;
     clearTimeout(refreshTimer);
-    refreshTimer = window.setTimeout(() => refreshCards(root), 220);
+    refreshTimer = window.setTimeout(() => refreshCards(root), delay);
   };
 
-  root.addEventListener('change', schedule, true);
-  root.addEventListener('submit', schedule, true);
+  root.addEventListener('change', () => schedule(260), true);
+  root.addEventListener('submit', () => schedule(420), true);
   root.addEventListener('click', event => {
     const overdue = event.target.closest('[data-reports-overdue-user]');
     if (overdue) {
@@ -33,15 +33,24 @@ export function initReportsCalendarDetails() {
     if (completed) {
       event.preventDefault();
       openEmployeeCalendar(completed.dataset.reportsCompletedCalendar || '');
+      return;
+    }
+
+    if (event.target.closest('[data-reports-refresh], [data-reports-reset], .reports-show-btn')) {
+      schedule(500);
     }
   }, true);
 
   window.addEventListener('app:view-changed', event => {
-    if (event.detail?.viewId === 'reports') schedule();
+    if (event.detail?.viewId === 'reports') {
+      schedule(300);
+      window.setTimeout(() => schedule(0), 900);
+    }
   });
+  window.addEventListener('reports:reload', () => schedule(350));
 
-  new MutationObserver(schedule).observe(root, { childList: true, subtree: true });
-  schedule();
+  schedule(350);
+  window.setTimeout(() => schedule(0), 1000);
 }
 
 async function refreshCards(root) {
@@ -89,11 +98,17 @@ async function refreshCard(card, selectedDate) {
 
   const completed = merged.filter(isDone);
   addCompletedButton(card, name, completed.length);
+  addPlanExclusionNote(card);
 }
 
 function renderHearings(card, rows, selectedDate) {
   const section = card.querySelector('.reports-hearings-card');
   if (!section) return;
+  const signature = rows.map(task => [task.id ?? task.task_id, taskTime(task), task.court, task.subject || task.description || task.desc].join('|')).join('||');
+  const nextSignature = `${selectedDate}:${signature}`;
+  if (section.dataset.calendarDetailsSignature === nextSignature) return;
+  section.dataset.calendarDetailsSignature = nextSignature;
+
   const heading = section.querySelector('h5');
   const count = section.querySelector('.reports-section-title-row > span');
   if (heading) heading.textContent = `Судебные заседания ${formatDate(selectedDate)}`;
@@ -106,6 +121,18 @@ function renderHearings(card, rows, selectedDate) {
   section.insertAdjacentHTML('beforeend', rows.length
     ? `<div class="reports-hearing-list">${rows.map(task => `<div class="reports-hearing-chip"><b>${escapeHtml(taskTime(task) || '—')}</b><span>${escapeHtml(task.court || 'Суд не указан')}</span><small>${escapeHtml(task.subject || task.description || task.desc || 'Данные дела не указаны')}</small></div>`).join('')}</div>`
     : '<div class="reports-hearings-empty"><i aria-hidden="true">⚖</i><strong>На выбранную дату заседаний нет</strong><p>Заседания выбранного сотрудника появятся здесь</p></div>');
+}
+
+function addPlanExclusionNote(card) {
+  const textBlock = card.querySelector('.reports-plan-main > div:first-child');
+  if (!textBlock || textBlock.querySelector('[data-reports-plan-note]')) return;
+  const note = document.createElement('small');
+  note.dataset.reportsPlanNote = '';
+  note.className = 'reports-plan-exclusion-note';
+  note.textContent = '*без учета судебных заседаний';
+  const remaining = textBlock.querySelector('p');
+  if (remaining) textBlock.insertBefore(note, remaining);
+  else textBlock.append(note);
 }
 
 function addCompletedButton(card, name, count) {
