@@ -11,6 +11,8 @@ import { initGeneralCasesPage } from './modules/cases/generalCasesController.js'
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
+import { initCalendarAssignmentWorkflow } from './modules/calendar/assignmentWorkflow.js';
+import { initAssignmentNotificationUi } from './modules/calendar/assignmentNotificationUi.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
@@ -45,6 +47,8 @@ export function initApp() {
     initControlledCasesPage();
     initEnforcementPage();
     initCalendarPage();
+    initCalendarAssignmentWorkflow();
+    initAssignmentNotificationUi();
     initSchedulePage();
     initEmergencyFundPage();
     initMunicipalRegistryPage();
