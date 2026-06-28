@@ -36,7 +36,7 @@ async function refresh() {
   }
 
   const tasks = (Array.isArray(rows) ? rows : [])
-    .filter(row => taskDate(row) === today && !isDone(row))
+    .filter(row => taskDate(row) === today)
     .sort((a, b) => taskTime(a).localeCompare(taskTime(b)));
 
   count.textContent = String(tasks.length);
@@ -48,7 +48,8 @@ function renderTask(task) {
   const title = task.description || task.desc || task.assignment || task.subject || 'Без описания';
   const subtitle = task.court || task.subject || '';
   const type = task.task_type || task.type || 'задача';
-  return `<article class="calendar-widget-kanban-task" data-calendar-widget-kanban-task="${escapeHtml(id)}"><div class="calendar-widget-kanban-task-top"><b>${escapeHtml(taskTime(task))}</b><span>${escapeHtml(type)}</span></div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(subtitle)}</p></article>`;
+  const done = isDone(task);
+  return `<article class="calendar-widget-kanban-task${done ? ' is-done' : ''}" data-calendar-widget-kanban-task="${escapeHtml(id)}"><div class="calendar-widget-kanban-task-top"><b>${escapeHtml(taskTime(task))}</b><span>${escapeHtml(type)}</span></div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(subtitle)}</p>${done ? '<em>Исполнено</em>' : ''}</article>`;
 }
 
 function taskDate(task) {
