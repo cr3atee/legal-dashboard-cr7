@@ -9,15 +9,33 @@ const extendedApiPlugin = {
   configureServer(server) {
     const api = require('./server/apiRouter.cjs');
     const dbPath = path.resolve(process.cwd(), 'data/app.db');
+
+    // Полная проверка и миграция схемы запускается один раз в фоне.
+    // Раньше каждый запрос, включая вход, ждал завершения всех ALTER TABLE,
+    // заполнения справочников и миграций, поэтому экран зависал на «Проверка...».
+    const schemaReady = api.ensureSchema(dbPath).catch(error => {
+      console.error('[local-api] schema initialization failed:', error);
+      throw error;
+    });
+
     server.middlewares.use(async (req, res, next) => {
       if (!req.url?.startsWith('/api/')) return next();
       try {
-        await api.ensureSchema(dbPath);
         const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const isAuthRequest = url.pathname === '/api/auth/login'
+          || url.pathname === '/api/auth/me'
+          || url.pathname === '/api/auth/logout'
+          || url.pathname === '/api/health';
+
+        // Авторизация работает сразу по существующей БД и не блокируется
+        // длительной полной миграцией остальных таблиц приложения.
+        if (!isAuthRequest) await schemaReady;
+
         if (!await api.handleApiRequest(req, res, url, dbPath)) next();
       } catch (error) {
+        console.error('[local-api] request failed:', error);
         if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-        if (!res.writableEnded) res.end(JSON.stringify({ error: 'local_api_error' }));
+        if (!res.writableEnded) res.end(JSON.stringify({ error: 'local_api_error', message: error?.message || '' }));
       }
     });
   }
