@@ -17,7 +17,10 @@ export function initCalendarExecutorControl() {
   window.addEventListener('app:view-changed', event => {
     if (!event.detail?.viewId || event.detail.viewId === 'calendar') schedule();
   });
-  window.addEventListener('calendar:reload', schedule);
+  window.addEventListener('calendar:reload', () => {
+    usersCache = [];
+    schedule();
+  });
   window.addEventListener('calendar:updated', syncPickerState);
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
   schedule();
@@ -30,10 +33,7 @@ async function renderPicker() {
   const nativeSelect = nativeLabel?.querySelector('[data-calendar-user]');
   if (!row || !executionButton || !nativeSelect) return;
 
-  // Старое поле оставляем только как технический канал для calendarController.
-  // Пользователь его больше не видит и не взаимодействует с ним напрямую.
   nativeLabel.hidden = true;
-  nativeLabel.classList.remove('calendar-executor-inline');
   nativeLabel.dataset.calendarExecutorInternal = '1';
 
   let picker = row.querySelector('[data-calendar-executor-picker]');
@@ -54,6 +54,15 @@ async function renderPicker() {
     row.insertBefore(picker, executionButton);
   }
 
+  if (picker.dataset.loaded === '1' && usersCache.length) {
+    picker.hidden = false;
+    syncPickerState();
+    return;
+  }
+
+  if (picker.dataset.loading === '1') return;
+  picker.dataset.loading = '1';
+
   try {
     usersCache = await dbApi.getCalendarUsers();
     const users = Array.isArray(usersCache) ? usersCache : [];
@@ -64,11 +73,14 @@ async function renderPicker() {
         .filter(user => Number(user.role_level ?? 1) === 1)
         .map(user => `<button type="button" data-calendar-executor-id="${escapeHtml(user.id)}">${escapeHtml(user.full_name || '')}</button>`)
     ].join('');
+    picker.dataset.loaded = '1';
     picker.hidden = false;
     syncPickerState();
   } catch (error) {
     picker.hidden = true;
     console.warn('Выбор исполнителя недоступен:', error);
+  } finally {
+    delete picker.dataset.loading;
   }
 }
 
