@@ -13,4 +13,98 @@
 .latest-report-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .latest-report-dialog-body { display:grid; gap:8px; max-height:60vh; overflow-y:auto; margin-top:16px; }
 .latest-report-dialog-body button { display:grid; gap:5px; width:100%; border:1px solid #dbe5f1; border-radius:12px; padding:12px 14px; background:#f8faff; text-align:left; }
-@media (max-width:900px) { #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; } }
+
+/* Notifications: keep the bulk action on the same row as the tabs. */
+#notificationsPanel .notifications-toolbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:nowrap;
+}
+#notificationsPanel .notifications-tabs {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  flex:1 1 auto;
+}
+#notificationsPanel [data-notifications-mark-all] {
+  flex:0 0 auto;
+  align-self:center;
+  margin:0;
+  white-space:nowrap;
+}
+
+/* Login success: clean green lock animation without the old status strip. */
+.login-success-lock {
+  display:grid;
+  place-items:center;
+  min-height:78px;
+  margin:2px 0 10px;
+}
+.login-success-lock[hidden] { display:none !important; }
+.login-success-lock svg {
+  width:72px;
+  height:72px;
+  overflow:visible;
+  filter:drop-shadow(0 10px 24px rgba(34,197,94,.28));
+  animation:login-success-lock-pop .38s cubic-bezier(.2,.9,.25,1.25) both;
+}
+.login-success-lock-ring {
+  fill:rgba(34,197,94,.12);
+  stroke:#22c55e;
+  stroke-width:2.2;
+  stroke-dasharray:195;
+  stroke-dashoffset:195;
+  animation:login-success-ring .48s ease-out .05s forwards;
+}
+.login-success-lock-body {
+  fill:#22c55e;
+  stroke:#86efac;
+  stroke-width:1.4;
+}
+.login-success-lock-key,
+.login-success-lock-stem {
+  fill:#ecfdf5;
+  stroke:#ecfdf5;
+  stroke-width:2.2;
+  stroke-linecap:round;
+}
+.login-success-lock-shackle {
+  fill:none;
+  stroke:#22c55e;
+  stroke-width:6;
+  stroke-linecap:round;
+  transform-origin:25px 34px;
+  animation:login-success-unlock .62s cubic-bezier(.22,.8,.3,1) .28s forwards;
+}
+.login-card[data-state="success"] .login-error,
+.login-card[data-state="success"] [data-login-error] {
+  display:none !important;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+.login-card[data-state="success"] .login-submit {
+  visibility:hidden;
+}
+@keyframes login-success-lock-pop {
+  0% { opacity:0; transform:scale(.62); }
+  70% { opacity:1; transform:scale(1.08); }
+  100% { opacity:1; transform:scale(1); }
+}
+@keyframes login-success-ring {
+  to { stroke-dashoffset:0; }
+}
+@keyframes login-success-unlock {
+  0% { transform:translate(0,0) rotate(0deg); }
+  55% { transform:translate(0,-9px) rotate(0deg); }
+  100% { transform:translate(3px,-10px) rotate(18deg); }
+}
+
+@media (max-width:900px) {
+  #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; }
+  #notificationsPanel .notifications-toolbar { align-items:stretch; flex-wrap:wrap; }
+  #notificationsPanel [data-notifications-mark-all] { width:100%; }
+}
