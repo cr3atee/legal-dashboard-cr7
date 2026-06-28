@@ -21,6 +21,7 @@ import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
 import { initUtilityPanels } from './modules/utility/utilityPanelsController.js';
+import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
@@ -54,6 +55,7 @@ export function initApp() {
     initAdminDictionariesPage();
     initMapFullscreenButton();
     initUtilityPanels();
+    initUserRequestedEnhancements();
     initCaseNumberAutoYear();
   });
 }
