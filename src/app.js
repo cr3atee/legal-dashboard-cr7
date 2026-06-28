@@ -19,7 +19,6 @@ import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipal
 import { initMeetingsPage } from './modules/meetings/meetingsController.js';
 import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js';
 import { initReportsPage } from './modules/reports/reportsController.js';
-import { initReportsCalendarDetails } from './modules/reports/reportsCalendarDetails.js';
 import { initReportsQuarterController } from './modules/reports/reportsQuarterController.js';
 import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
@@ -61,7 +60,6 @@ export function initApp() {
     initMeetingsPage();
     initMeetingsWorkflowUi();
     initReportsPage();
-    initReportsCalendarDetails();
     initReportsQuarterController();
     initAdminUsersPage();
     initAdminDictionariesPage();
