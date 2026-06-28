@@ -1,4 +1,5 @@
 import './styles/user-requested-enhancements.css';
+import './styles/latest-user-requirements.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
@@ -23,6 +24,8 @@ import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDict
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
 import { initUtilityPanels } from './modules/utility/utilityPanelsController.js';
 import { initUserRequestedEnhancements } from './modules/workflow/userRequestedEnhancements.js';
+import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
+import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
@@ -57,6 +60,8 @@ export function initApp() {
     initMapFullscreenButton();
     initUtilityPanels();
     initUserRequestedEnhancements();
+    initLatestUserRequirements();
+    initAssignmentNotificationOpen();
     initCaseNumberAutoYear();
   });
 }
