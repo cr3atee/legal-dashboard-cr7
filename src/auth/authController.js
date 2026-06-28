@@ -140,13 +140,21 @@ function renderLoginScreen(onAuthenticated) {
     try {
       const session = await dbApi.login(password);
       setLoginState(card, errorNode, lock, visual, 'success', 'Доступ подтверждён.');
-      await visual.showSuccessText(APP_DISPLAY_NAME);
-      await delay(160);
+
+      // Не блокируем вход анимацией: раньше незавершившийся Promise
+      // showSuccessText оставлял пользователя на экране авторизации.
+      await Promise.race([
+        Promise.resolve(visual.showSuccessText(APP_DISPLAY_NAME)).catch(() => undefined),
+        delay(900)
+      ]);
+
       setAuthSession(session);
+      window.legalDashboardSession = session;
       visual.destroy();
       onAuthenticated(session);
-    } catch {
-      setLoginState(card, errorNode, lock, visual, 'error', 'Неверный пароль.');
+    } catch (error) {
+      console.error('Login failed:', error);
+      setLoginState(card, errorNode, lock, visual, 'error', 'Не удалось открыть систему. Повторите вход.');
       input.select();
     } finally {
       button.disabled = false;
