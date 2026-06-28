@@ -23,7 +23,7 @@ export function initParticipantCaseCreateGuard() {
   applyCreateButtonPolicy();
 
   observer = new MutationObserver(() => applyCreateButtonPolicy());
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'style', 'class', 'disabled'] });
 
   document.addEventListener('click', event => {
     const trigger = event.target.closest('[data-general-new]');
@@ -39,14 +39,22 @@ function applyCreateButtonPolicy() {
   if (!button) return;
 
   const allowed = canCurrentUserCreateCase();
-  button.disabled = !allowed;
-  button.toggleAttribute('aria-disabled', !allowed);
-  button.classList.toggle('is-disabled', !allowed);
 
   if (!allowed) {
     button.removeAttribute('onclick');
-    button.title = 'Добавление новых дел доступно только администратору';
+    button.disabled = true;
+    button.setAttribute('aria-disabled', 'true');
+    button.setAttribute('hidden', '');
+    button.style.setProperty('display', 'none', 'important');
+    button.classList.add('is-disabled');
+    return;
   }
+
+  button.disabled = false;
+  button.removeAttribute('aria-disabled');
+  button.removeAttribute('hidden');
+  button.style.removeProperty('display');
+  button.classList.remove('is-disabled');
 }
 
 function canCurrentUserCreateCase() {
