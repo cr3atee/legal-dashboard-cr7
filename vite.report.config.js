@@ -9,14 +9,18 @@ const extendedApiPlugin = {
   configureServer(server) {
     const api = require('./server/apiRouter.cjs');
     const dbPath = path.resolve(process.cwd(), 'data/app.db');
+    let schemaReady = null;
 
-    // Полная проверка и миграция схемы запускается один раз в фоне.
-    // Раньше каждый запрос, включая вход, ждал завершения всех ALTER TABLE,
-    // заполнения справочников и миграций, поэтому экран зависал на «Проверка...».
-    const schemaReady = api.ensureSchema(dbPath).catch(error => {
-      console.error('[local-api] schema initialization failed:', error);
-      throw error;
-    });
+    const ensureSchemaOnce = () => {
+      if (!schemaReady) {
+        schemaReady = api.ensureSchema(dbPath).catch(error => {
+          console.error('[local-api] schema initialization failed:', error);
+          schemaReady = null;
+          throw error;
+        });
+      }
+      return schemaReady;
+    };
 
     server.middlewares.use(async (req, res, next) => {
       if (!req.url?.startsWith('/api/')) return next();
@@ -27,9 +31,9 @@ const extendedApiPlugin = {
           || url.pathname === '/api/auth/logout'
           || url.pathname === '/api/health';
 
-        // Авторизация работает сразу по существующей БД и не блокируется
-        // длительной полной миграцией остальных таблиц приложения.
-        if (!isAuthRequest) await schemaReady;
+        // Не запускаем полную миграцию базы при старте Vite и до входа.
+        // Иначе она захватывает SQLite и даже быстрый auth-обработчик ждёт блокировку.
+        if (!isAuthRequest) await ensureSchemaOnce();
 
         if (!await api.handleApiRequest(req, res, url, dbPath)) next();
       } catch (error) {
