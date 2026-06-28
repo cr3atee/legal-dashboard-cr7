@@ -28,7 +28,6 @@ import { initUserRequestedEnhancements } from './modules/workflow/userRequestedE
 import { initLatestUserRequirements } from './modules/workflow/latestUserRequirements.js';
 import { initAssignmentNotificationOpen } from './modules/workflow/assignmentNotificationOpen.js';
 import { initRoleUiPolicy } from './modules/workflow/roleUiPolicy.js';
-import { initDashboardTodaySync } from './modules/workflow/dashboardTodaySync.js';
 import { initAuthGate, initAuthUi } from './auth/authController.js';
 import { initSidebarCollapse } from './layout/sidebarCollapse.js';
 import { initThemeUi } from './core/theme.js';
@@ -67,7 +66,6 @@ export function initApp() {
     initLatestUserRequirements();
     initAssignmentNotificationOpen();
     initRoleUiPolicy();
-    initDashboardTodaySync();
     initCaseNumberAutoYear();
   });
 }
