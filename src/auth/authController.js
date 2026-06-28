@@ -14,7 +14,6 @@ export function initAuthGate(onAuthenticated) {
   }
 
   if (existing) clearAuthSession();
-
   renderLoginScreen(onAuthenticated);
 }
 
@@ -37,17 +36,8 @@ function renderLoginScreen(onAuthenticated) {
 
   root.innerHTML = `
     <main class="login-screen">
-      <section
-        class="login-visual"
-        data-login-visual-label="${APP_DISPLAY_NAME}"
-        aria-label="Интерактивная цифровая фигура"
-      >
-        <canvas
-          class="login-visual-canvas"
-          data-login-particle-canvas
-          tabindex="0"
-          aria-label="Интерактивная сфера защиты"
-        ></canvas>
+      <section class="login-visual" data-login-visual-label="${APP_DISPLAY_NAME}" aria-label="Интерактивная цифровая фигура">
+        <canvas class="login-visual-canvas" data-login-particle-canvas tabindex="0" aria-label="Интерактивная сфера защиты"></canvas>
         <div class="login-visual-fallback" data-login-particle-fallback aria-hidden="true" hidden></div>
       </section>
 
@@ -85,7 +75,6 @@ function renderLoginScreen(onAuthenticated) {
           </label>
 
           <div class="login-error" id="loginStatus" data-login-error role="status" aria-live="polite" hidden></div>
-
           <button class="btn primary login-submit" type="submit">Войти</button>
         </form>
       </section>
@@ -126,7 +115,6 @@ function renderLoginScreen(onAuthenticated) {
     event.preventDefault();
 
     const password = input.value.trim();
-
     if (!password) {
       setLoginState(card, errorNode, lock, visual, 'error', 'Введите пароль.');
       return;
@@ -137,28 +125,40 @@ function renderLoginScreen(onAuthenticated) {
     button.textContent = 'Проверка...';
     setLoginState(card, errorNode, lock, visual, 'checking', 'Выполняется проверка доступа.');
 
+    let session;
     try {
-      const session = await dbApi.login(password);
-      setLoginState(card, errorNode, lock, visual, 'success', 'Доступ подтверждён.');
-
-      // Не блокируем вход анимацией: раньше незавершившийся Promise
-      // showSuccessText оставлял пользователя на экране авторизации.
-      await Promise.race([
-        Promise.resolve(visual.showSuccessText(APP_DISPLAY_NAME)).catch(() => undefined),
-        delay(900)
-      ]);
-
-      setAuthSession(session);
-      window.legalDashboardSession = session;
-      visual.destroy();
-      onAuthenticated(session);
+      session = await dbApi.login(password);
     } catch (error) {
-      console.error('Login failed:', error);
-      setLoginState(card, errorNode, lock, visual, 'error', 'Не удалось открыть систему. Повторите вход.');
+      console.error('Login request failed:', error);
+      setLoginState(card, errorNode, lock, visual, 'error', 'Неверный пароль.');
       input.select();
-    } finally {
       button.disabled = false;
       button.textContent = 'Войти';
+      return;
+    }
+
+    setLoginState(card, errorNode, lock, visual, 'success', 'Доступ подтверждён.');
+
+    // После успешного ответа вход выполняется сразу. Анимация больше не может
+    // задержать или заблокировать открытие главного экрана.
+    setAuthSession(session);
+    window.legalDashboardSession = session;
+    try { visual.destroy(); } catch {}
+
+    try {
+      onAuthenticated(session);
+    } catch (error) {
+      console.error('Application initialization failed after login:', error);
+      root.innerHTML = `
+        <main class="login-screen">
+          <section class="login-card" data-state="error">
+            <h1>Ошибка запуска системы</h1>
+            <p class="login-error" role="alert">${escapeHtml(error?.message || 'Не удалось открыть главный экран.')}</p>
+            <button class="btn primary" type="button" data-login-reload>Перезагрузить страницу</button>
+          </section>
+        </main>
+      `;
+      root.querySelector('[data-login-reload]')?.addEventListener('click', () => window.location.reload());
     }
   });
 }
@@ -178,9 +178,7 @@ export function initAuthUi() {
         return;
       }
 
-      if (!profileCard) {
-        closeTopbarProfileDropdown();
-      }
+      if (!profileCard) closeTopbarProfileDropdown();
     });
 
     document.addEventListener('keydown', event => {
@@ -236,6 +234,11 @@ function setLoginState(card, errorNode, lock, visual, state, message = '') {
   if (state !== 'success') visual.setState(state);
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
