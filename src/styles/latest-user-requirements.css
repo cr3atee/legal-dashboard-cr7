@@ -14,39 +14,46 @@
 .latest-report-dialog-body { display:grid; gap:8px; max-height:60vh; overflow-y:auto; margin-top:16px; }
 .latest-report-dialog-body button { display:grid; gap:5px; width:100%; border:1px solid #dbe5f1; border-radius:12px; padding:12px 14px; background:#f8faff; text-align:left; }
 
-/* Notifications: keep the bulk action on the same row as the tabs. */
+/* Notifications: three tabs and the bulk action share one row without overlap. */
 #notificationsPanel .notifications-toolbar {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 190px;
+  align-items:stretch;
   gap:12px;
-  flex-wrap:nowrap;
+  width:100%;
 }
 #notificationsPanel .notifications-tabs {
-  display:flex;
-  align-items:center;
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  align-items:stretch;
   gap:10px;
   min-width:0;
-  flex:1 1 auto;
+  width:100%;
 }
 #notificationsPanel .notifications-tab {
-  min-width:150px;
+  width:100%;
+  min-width:0;
   min-height:48px;
-  padding:0 18px;
+  padding:0 12px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
   gap:8px;
   white-space:nowrap;
+  overflow:visible;
 }
 #notificationsPanel [data-notifications-mark-all] {
-  flex:0 0 auto;
-  align-self:center;
-  min-width:230px;
+  width:190px;
+  min-width:190px;
   min-height:48px;
-  padding:0 20px;
+  padding:8px 14px;
   margin:0;
-  white-space:nowrap;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  white-space:normal;
+  line-height:1.2;
 }
 
 /* Login success: clean green lock animation without the old status strip. */
@@ -118,8 +125,14 @@
 
 @media (max-width:900px) {
   #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; }
-  #notificationsPanel .notifications-toolbar { align-items:stretch; flex-wrap:wrap; }
-  #notificationsPanel .notifications-tabs { width:100%; }
-  #notificationsPanel .notifications-tab { flex:1 1 160px; min-width:0; }
-  #notificationsPanel [data-notifications-mark-all] { width:100%; min-width:0; }
+  #notificationsPanel .notifications-toolbar {
+    grid-template-columns:1fr;
+  }
+  #notificationsPanel .notifications-tabs {
+    grid-template-columns:1fr;
+  }
+  #notificationsPanel [data-notifications-mark-all] {
+    width:100%;
+    min-width:0;
+  }
 }
