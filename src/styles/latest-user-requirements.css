@@ -14,65 +14,66 @@
 .latest-report-dialog-body { display:grid; gap:8px; max-height:60vh; overflow-y:auto; margin-top:16px; }
 .latest-report-dialog-body button { display:grid; gap:5px; width:100%; border:1px solid #dbe5f1; border-radius:12px; padding:12px 14px; background:#f8faff; text-align:left; }
 
-/* Notifications: clean, balanced toolbar without text or counter overlap. */
+/* Notifications toolbar: roomy tabs, compact bulk action, no overlaps. */
+#notificationsPanel {
+  width:min(1180px, calc(100vw - 48px));
+  max-width:none;
+}
 #notificationsPanel .notifications-toolbar {
   display:grid;
-  grid-template-columns:minmax(0, 1fr) 205px;
+  grid-template-columns:minmax(690px, 1fr) 178px;
   align-items:stretch;
-  gap:12px;
+  gap:14px;
   width:100%;
+  box-sizing:border-box;
 }
 #notificationsPanel .notifications-tabs {
   display:grid;
-  grid-template-columns:repeat(3, minmax(0, 1fr));
-  align-items:stretch;
-  gap:10px;
+  grid-template-columns:repeat(3, minmax(210px, 1fr));
+  gap:12px;
   min-width:0;
   width:100%;
 }
 #notificationsPanel .notifications-tab {
-  position:relative;
   width:100%;
   min-width:0;
-  min-height:60px;
-  padding:10px 48px 10px 16px;
+  min-height:64px;
+  padding:0 18px;
   display:flex;
   align-items:center;
-  justify-content:flex-start;
+  justify-content:space-between;
+  gap:16px;
   box-sizing:border-box;
-  text-align:left;
-  white-space:normal;
-  line-height:1.15;
+  white-space:nowrap;
   overflow:hidden;
+  text-align:left;
 }
 #notificationsPanel .notifications-tab > span {
-  position:absolute;
-  top:50%;
-  right:12px;
-  transform:translateY(-50%);
-  min-width:32px;
-  height:32px;
-  padding:0 8px;
+  position:static !important;
+  transform:none !important;
+  flex:0 0 auto;
+  min-width:34px;
+  height:34px;
+  padding:0 9px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
   box-sizing:border-box;
   border-radius:999px;
-  flex:0 0 auto;
 }
 #notificationsPanel [data-notifications-mark-all] {
-  width:205px;
-  min-width:205px;
-  min-height:60px;
-  padding:10px 16px;
-  margin:0;
+  width:178px;
+  min-width:178px;
+  min-height:64px;
+  padding:10px 12px;
+  margin:0 0 0 auto;
   display:flex;
   align-items:center;
   justify-content:center;
   box-sizing:border-box;
   text-align:center;
   white-space:normal;
-  line-height:1.2;
+  line-height:1.15;
 }
 
 /* Login success: clean green lock animation without the old status strip. */
@@ -142,8 +143,7 @@
   100% { transform:translate(3px,-10px) rotate(18deg); }
 }
 
-@media (max-width:900px) {
-  #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; }
+@media (max-width:1000px) {
   #notificationsPanel .notifications-toolbar {
     grid-template-columns:1fr;
   }
@@ -154,4 +154,8 @@
     width:100%;
     min-width:0;
   }
+}
+
+@media (max-width:900px) {
+  #calendar [data-calendar-executor-control] { width:100%; min-width:0; margin-left:0; margin-right:0; }
 }
