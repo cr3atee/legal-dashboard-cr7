@@ -5,7 +5,9 @@ const path = require('path');
 const { URL } = require('url');
 
 const port = Number(process.env.PORT || 8080);
-const root = path.join(__dirname, 'dist');
+const publicRoot = path.join(__dirname, 'public');
+const distRoot = path.join(__dirname, 'dist');
+const root = fs.existsSync(publicRoot) ? publicRoot : distRoot;
 
 const proxies = [
   { prefix: '/nspd', target: 'https://nspd.gov.ru' },
