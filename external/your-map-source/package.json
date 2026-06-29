@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "start": "node server.cjs",
+    "package:domain": "npm run build && node package-domain.cjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
