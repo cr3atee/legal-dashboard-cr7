@@ -52,7 +52,7 @@ async function sessionForRequest(db, req) {
 }
 
 function canViewAny(session) {
-  if (Number(session?.role_level || 0) >= 3) return true;
+  if (Number(session?.role_level || 0) >= 2) return true;
   try {
     return JSON.parse(session?.permissions_json || '[]').includes('cases.view.any');
   } catch {
@@ -173,7 +173,7 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
       const where = [];
       const params = [];
       if (!isAdmin) where.push('COALESCE(cancelled_flag,0)=0');
-      if (!canViewAny(session)) {
+      if (!isAdmin && !canViewAny(session)) {
         where.push("COALESCE(executor,'')=?");
         params.push(session.full_name || '');
       }
