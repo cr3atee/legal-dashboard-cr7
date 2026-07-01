@@ -31,21 +31,30 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function requestToken(req) {
-  const header = String(req.headers?.authorization || req.headers?.['x-session-token'] || '').trim();
-  return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : header;
-}
-
 async function sessionForRequest(db, req) {
-  const token = requestToken(req);
-  if (!token) return null;
-  return get(db, `
-    SELECT u.id, u.full_name, COALESCE(u.role_level, 0) AS role_level
-    FROM app_sessions s
-    JOIN users u ON u.id=s.user_id
-    WHERE s.token=? AND COALESCE(u.is_active,1)=1
-    LIMIT 1
-  `, [token]);
+  const rawId = String(req.headers?.['x-user-id'] || '').trim();
+  const rawName = decodeURIComponent(String(req.headers?.['x-user-name'] || '').trim());
+
+  if (/^\d+$/.test(rawId)) {
+    const byId = await get(db, `
+      SELECT id, full_name, COALESCE(role_level, 0) AS role_level
+      FROM users
+      WHERE id=? AND COALESCE(is_active,1)=1
+      LIMIT 1
+    `, [Number(rawId)]);
+    if (byId) return byId;
+  }
+
+  if (rawName) {
+    return get(db, `
+      SELECT id, full_name, COALESCE(role_level, 0) AS role_level
+      FROM users
+      WHERE full_name=? AND COALESCE(is_active,1)=1
+      LIMIT 1
+    `, [rawName]);
+  }
+
+  return null;
 }
 
 async function ensureGeneralCaseCancellationSchema(dbPath) {
@@ -100,8 +109,9 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
   const db = openDb(dbPath);
   try {
     const session = await sessionForRequest(db, req);
+    const isAdmin = Number(session?.role_level || 0) >= 2;
 
-    if (path === '/api/general-cases' && req.method === 'GET' && url.searchParams.get('archived') !== '1' && Number(session?.role_level || 0) >= 2) {
+    if (path === '/api/general-cases' && req.method === 'GET' && url.searchParams.get('archived') !== '1' && isAdmin) {
       const search = String(url.searchParams.get('search') || '').trim().toLowerCase();
       const active = await all(db, 'SELECT *, 0 AS cancelled_flag, "" AS cancelled_at, "" AS cancelled_by FROM general_cases');
       const cancelled = await all(db, 'SELECT *, 1 AS cancelled_flag FROM general_cases_cancelled');
@@ -112,9 +122,19 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
       return true;
     }
 
+    const caseMatch = path.match(/^\/api\/general-cases\/(\d+)$/);
+    if (caseMatch && req.method === 'GET' && isAdmin) {
+      const id = Number(caseMatch[1]);
+      const row = await get(db, 'SELECT *, 1 AS cancelled_flag FROM general_cases_cancelled WHERE id=?', [id]);
+      if (row) {
+        sendJson(res, 200, row);
+        return true;
+      }
+    }
+
     const statusMatch = path.match(/^\/api\/general-cases\/(\d+)\/cancel-status$/);
     if (statusMatch && req.method === 'GET') {
-      if (Number(session?.role_level || 0) < 2) { sendJson(res, 403, { error: 'forbidden' }); return true; }
+      if (!isAdmin) { sendJson(res, 403, { error: 'forbidden' }); return true; }
       const id = Number(statusMatch[1]);
       const row = await get(db, 'SELECT id, cancelled_at, cancelled_by FROM general_cases_cancelled WHERE id=?', [id]);
       sendJson(res, 200, { cancelled: Boolean(row), ...(row || {}) });
@@ -123,7 +143,7 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
 
     const cancelMatch = path.match(/^\/api\/general-cases\/(\d+)\/(cancel|restore-cancelled)$/);
     if (cancelMatch && req.method === 'POST') {
-      if (Number(session?.role_level || 0) < 2) { sendJson(res, 403, { error: 'forbidden' }); return true; }
+      if (!isAdmin) { sendJson(res, 403, { error: 'forbidden' }); return true; }
       const id = Number(cancelMatch[1]);
       const cancel = cancelMatch[2] === 'cancel';
       await moveCase(db, id, cancel, session.full_name || 'Администратор');
