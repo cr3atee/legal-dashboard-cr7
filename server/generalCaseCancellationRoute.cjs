@@ -31,30 +31,23 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
+function requestToken(req) {
+  const header = String(req.headers?.authorization || req.headers?.['x-session-token'] || '').trim();
+  return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : header;
+}
+
 async function sessionForRequest(db, req) {
-  const rawId = String(req.headers?.['x-user-id'] || '').trim();
-  const rawName = decodeURIComponent(String(req.headers?.['x-user-name'] || '').trim());
-
-  if (/^\d+$/.test(rawId)) {
-    const byId = await get(db, `
-      SELECT id, full_name, COALESCE(role_level, 0) AS role_level
-      FROM users
-      WHERE id=? AND COALESCE(is_active,1)=1
-      LIMIT 1
-    `, [Number(rawId)]);
-    if (byId) return byId;
-  }
-
-  if (rawName) {
-    return get(db, `
-      SELECT id, full_name, COALESCE(role_level, 0) AS role_level
-      FROM users
-      WHERE full_name=? AND COALESCE(is_active,1)=1
-      LIMIT 1
-    `, [rawName]);
-  }
-
-  return null;
+  const token = requestToken(req);
+  if (!token) return null;
+  return get(db, `
+    SELECT u.id, u.full_name, COALESCE(u.role_level, 0) AS role_level
+    FROM app_sessions s
+    JOIN users u ON u.id=s.user_id
+    WHERE s.token=?
+      AND COALESCE(u.is_active,1)=1
+      AND (COALESCE(s.expires_at,'')='' OR s.expires_at>?)
+    LIMIT 1
+  `, [token, new Date().toISOString()]);
 }
 
 async function ensureGeneralCaseCancellationSchema(dbPath) {
@@ -112,12 +105,21 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
     const isAdmin = Number(session?.role_level || 0) >= 2;
 
     if (path === '/api/general-cases' && req.method === 'GET' && url.searchParams.get('archived') !== '1' && isAdmin) {
-      const search = String(url.searchParams.get('search') || '').trim().toLowerCase();
+      const searchParts = String(url.searchParams.get('search') || '')
+        .toLowerCase()
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean);
       const active = await all(db, 'SELECT *, 0 AS cancelled_flag, "" AS cancelled_at, "" AS cancelled_by FROM general_cases');
       const cancelled = await all(db, 'SELECT *, 1 AS cancelled_flag FROM general_cases_cancelled');
       let rows = [...active, ...cancelled];
-      if (search) rows = rows.filter(row => Object.values(row).some(value => String(value ?? '').toLowerCase().includes(search)));
-      rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+      if (searchParts.length) {
+        rows = rows.filter(row => {
+          const text = Object.values(row).map(value => String(value ?? '').toLowerCase()).join(' | ');
+          return searchParts.every(part => text.includes(part));
+        });
+      }
+      rows.sort((a, b) => Number(a.cancelled_flag || 0) - Number(b.cancelled_flag || 0) || Number(b.id || 0) - Number(a.id || 0));
       sendJson(res, 200, rows.slice(0, 2000));
       return true;
     }
