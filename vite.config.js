@@ -12,10 +12,7 @@ function safeSetProxyHeader(proxyReq, name, value) {
     if (!proxyReq.headersSent && typeof proxyReq.setHeader === 'function') {
       proxyReq.setHeader(name, value);
     }
-  } catch {
-    // In newer Node/Vite versions headers can already be flushed.
-    // Ignore instead of crashing dev server with ERR_HTTP_HEADERS_SENT.
-  }
+  } catch {}
 }
 
 function setBrowserHeaders(proxy) {
@@ -31,21 +28,27 @@ export default defineConfig({
   plugins: [{
     name: 'sqlite-api-dev',
     configureServer(server) {
-      const { handleApiRequest, ensureSchema } = require('./server/apiRouter.cjs');
+      const api = require('./server/apiRouter.cjs');
+      const cancellation = require('./server/generalCaseCancellationRoute.cjs');
+      const numbering = require('./server/generalCaseNumberPreviewRoute.cjs');
       const dbPath = path.resolve(process.cwd(), 'data/app.db');
-      void ensureSchema(dbPath).catch(error => console.error('SQLite schema initialization error', error));
+      const ensureAll = async () => {
+        await api.ensureSchema(dbPath);
+        await cancellation.ensureGeneralCaseCancellationSchema(dbPath);
+      };
+      void ensureAll().catch(error => console.error('SQLite schema initialization error', error));
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api/')) return next();
         try {
-          await ensureSchema(dbPath);
+          await ensureAll();
           const url = new URL(req.url, `http://${req.headers.host || 'localhost:5173'}`);
-          const handled = await handleApiRequest(req, res, url, dbPath);
+          if (await cancellation.handleGeneralCaseCancellation(req, res, url, dbPath)) return;
+          if (await numbering.handleGeneralCaseNumberPreview(req, res, url, dbPath)) return;
+          const handled = await api.handleApiRequest(req, res, url, dbPath);
           if (!handled) next();
         } catch (error) {
           console.error('SQLite API middleware error', error);
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-          }
+          if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           if (!res.writableEnded) res.end(JSON.stringify({ error: 'server_error', message: error?.message || 'Ошибка API базы данных' }));
         }
       });
