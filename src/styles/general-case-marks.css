@@ -1,0 +1,61 @@
+.general-case-mark-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.general-case-mark-option.is-checked,
+.general-case-mark-option:has(.general-case-mark-checkbox:checked) {
+  background: #1976ff;
+  border-color: #005ee8;
+  color: #fff;
+}
+
+.general-case-mark-checkbox {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid #7b8aa0;
+  border-radius: 4px;
+  background: #fff;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 20px;
+}
+
+.general-case-mark-checkbox::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform .12s ease;
+}
+
+.general-case-mark-checkbox:checked {
+  background: #1976ff;
+  border-color: #005ee8;
+}
+
+.general-case-mark-checkbox:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+.general-case-mark-checkbox:focus-visible {
+  outline: 3px solid rgba(25, 118, 255, .35);
+  outline-offset: 2px;
+}
+
+.general-case-pk-number[readonly] {
+  font-weight: 700;
+  background: rgba(25, 118, 255, .08);
+  border-color: rgba(25, 118, 255, .45);
+}
