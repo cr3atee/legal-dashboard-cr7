@@ -7,8 +7,15 @@ function readSession() {
 }
 
 function authHeaders() {
-  const token = readSession().token || '';
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const session = readSession();
+  const token = session.token || '';
+  const userId = session.id || session.user_id || '';
+  const userName = session.full_name || session.user || session.name || '';
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(userId ? { 'X-User-Id': String(userId) } : {}),
+    ...(userName ? { 'X-User-Name': encodeURIComponent(String(userName)) } : {})
+  };
 }
 
 async function requestJson(url, options = {}) {
