@@ -1,6 +1,13 @@
+import '../../styles/general-case-marks.css';
+import { initGeneralCaseUiPolish } from './generalCaseUiPolish.js';
+import { initGeneralCasePkNumber } from './generalCasePkNumber.js';
+
 let timer = null;
 
 export function initAppealActionCleanup() {
+  initGeneralCaseUiPolish();
+  initGeneralCasePkNumber();
+
   const root = document.querySelector('#cases');
   if (!root) return;
   const clean = () => {
