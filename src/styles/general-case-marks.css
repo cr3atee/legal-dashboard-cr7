@@ -1,61 +1,86 @@
-.general-case-mark-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+[data-general-form] .general-case-mark-option {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 11px;
+  border:2px solid transparent;
+  border-radius:9px;
+  cursor:pointer;
+  transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
 }
 
-.general-case-mark-option.is-checked,
-.general-case-mark-option:has(.general-case-mark-checkbox:checked) {
-  background: #1976ff;
-  border-color: #005ee8;
-  color: #fff;
+[data-general-form] .general-case-mark-option.is-checked,
+[data-general-form] .general-case-mark-option:has(.general-case-mark-checkbox:checked) {
+  background:#0869ff !important;
+  border-color:#0052d9 !important;
+  color:#fff !important;
+  box-shadow:0 0 0 3px rgba(8,105,255,.18), 0 6px 16px rgba(8,105,255,.24);
 }
 
-.general-case-mark-checkbox {
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  border: 2px solid #7b8aa0;
-  border-radius: 4px;
-  background: #fff;
-  display: inline-grid;
-  place-content: center;
-  flex: 0 0 20px;
+[data-general-form] .general-case-mark-option.is-checked *,
+[data-general-form] .general-case-mark-option:has(.general-case-mark-checkbox:checked) * {
+  color:#fff !important;
 }
 
-.general-case-mark-checkbox::after {
-  content: '';
-  width: 10px;
-  height: 6px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) scale(0);
-  transform-origin: center;
-  transition: transform .12s ease;
+[data-general-form] .general-case-mark-checkbox {
+  -webkit-appearance:none !important;
+  appearance:none !important;
+  width:22px !important;
+  height:22px !important;
+  min-width:22px !important;
+  margin:0 !important;
+  border:2px solid #728198 !important;
+  border-radius:5px !important;
+  background:#fff !important;
+  display:inline-grid !important;
+  place-content:center !important;
+  flex:0 0 22px !important;
+  cursor:pointer;
+  box-sizing:border-box;
 }
 
-.general-case-mark-checkbox:checked {
-  background: #1976ff;
-  border-color: #005ee8;
+[data-general-form] .general-case-mark-checkbox::after {
+  content:'';
+  width:11px;
+  height:6px;
+  border-left:3px solid #fff;
+  border-bottom:3px solid #fff;
+  transform:translateY(-1px) rotate(-45deg) scale(0);
+  transform-origin:center;
+  transition:transform .12s ease;
 }
 
-.general-case-mark-checkbox:checked::after {
-  transform: rotate(-45deg) scale(1);
+[data-general-form] .general-case-mark-checkbox:checked {
+  background:#0869ff !important;
+  border-color:#004fd1 !important;
+  box-shadow:0 0 0 3px rgba(8,105,255,.22);
 }
 
-.general-case-mark-checkbox:focus-visible {
-  outline: 3px solid rgba(25, 118, 255, .35);
-  outline-offset: 2px;
+[data-general-form] .general-case-mark-checkbox:checked::after {
+  transform:translateY(-1px) rotate(-45deg) scale(1);
 }
 
-.general-case-pk-number[readonly] {
-  font-weight: 700;
-  background: rgba(25, 118, 255, .08);
-  border-color: rgba(25, 118, 255, .45);
+[data-general-form] .general-case-mark-checkbox:focus-visible {
+  outline:3px solid rgba(8,105,255,.42);
+  outline-offset:2px;
+}
+
+[data-general-form] .general-case-pk-number[readonly] {
+  font-weight:700;
+  color:#0b4fbd;
+  background:rgba(8,105,255,.09) !important;
+  border-color:rgba(8,105,255,.52) !important;
+}
+
+html[data-theme="dark"] [data-general-form] .general-case-mark-option.is-checked,
+html[data-theme="dark"] [data-general-form] .general-case-mark-option:has(.general-case-mark-checkbox:checked) {
+  background:#1479ff !important;
+  border-color:#4f9cff !important;
+  color:#fff !important;
+}
+
+html[data-theme="dark"] [data-general-form] .general-case-pk-number[readonly] {
+  color:#b9d7ff;
+  background:rgba(20,121,255,.18) !important;
+  border-color:rgba(79,156,255,.62) !important;
 }
