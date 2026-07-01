@@ -71,6 +71,32 @@
   border-color:rgba(8,105,255,.52) !important;
 }
 
+#cases .general-case-cancel-button.danger {
+  border-color:#dc2626 !important;
+  background:#fff1f2 !important;
+  color:#b91c1c !important;
+}
+
+#cases .general-case-cancel-button.restore {
+  border-color:#16a34a !important;
+  background:#ecfdf3 !important;
+  color:#15803d !important;
+}
+
+#cases .case-dialog-active-dot.is-cancelled,
+#cases .case-badge.cancelled {
+  background:#fee2e2 !important;
+  color:#b91c1c !important;
+  border:1px solid #fca5a5 !important;
+}
+
+#cases .is-cancelled-case {
+  opacity:.72;
+  filter:grayscale(.35);
+  outline:2px dashed #ef4444;
+  outline-offset:-2px;
+}
+
 html[data-theme="dark"] #cases [data-general-form] .case-form-flags .check-row {
   background:#172033 !important;
   border-color:#33415b !important;
