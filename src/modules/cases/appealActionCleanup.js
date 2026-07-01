@@ -1,12 +1,14 @@
 import '../../styles/general-case-marks.css';
 import { initGeneralCaseUiPolish } from './generalCaseUiPolish.js';
-import { initGeneralCasePkNumber } from './generalCasePkNumber.js';
+import { initGeneralCaseSaveNumber } from './generalCaseSaveNumber.js';
+import { initGeneralCaseCancellationUi } from './generalCaseCancellationUi.js';
 
 let timer = null;
 
 export function initAppealActionCleanup() {
   initGeneralCaseUiPolish();
-  initGeneralCasePkNumber();
+  initGeneralCaseSaveNumber();
+  initGeneralCaseCancellationUi();
 
   const root = document.querySelector('#cases');
   if (!root) return;
