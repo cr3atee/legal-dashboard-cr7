@@ -23,44 +23,44 @@ async function requestNumber() {
 }
 
 async function fillNewCaseNumber() {
-  const form = document.querySelector('[data-general-form]');
-  if (!(form instanceof HTMLFormElement)) return false;
+  const dialog = document.querySelector('[data-general-dialog]');
+  const form = dialog?.querySelector('[data-general-form]');
+  if (!(form instanceof HTMLFormElement)) return;
+  if (!dialog.open && !dialog.classList.contains('is-open')) return;
 
   const idInput = form.elements?.id;
   const input = form.elements?.case_no;
-  if (!(input instanceof HTMLInputElement)) return false;
-  if (Number(idInput?.value || 0)) return false;
+  if (!(input instanceof HTMLInputElement)) return;
+  if (Number(idInput?.value || 0)) return;
 
   input.readOnly = true;
   input.setAttribute('aria-readonly', 'true');
   input.classList.add('general-case-pk-number');
 
-  if (form.dataset.pkNumberForNewCase === '1' && input.value.trim()) return true;
-  if (form.dataset.pkNumberLoading === '1') return true;
+  if (input.value.trim()) return;
+  if (form.dataset.pkNumberLoading === '1') return;
 
   form.dataset.pkNumberLoading = '1';
-  input.value = '';
   input.placeholder = 'Формируется автоматически…';
-
   try {
     const value = await requestNumber();
     if (!value) throw new Error('Сервер не вернул № ПК');
-    input.value = value;
-    input.placeholder = '';
-    form.dataset.pkNumberForNewCase = '1';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!Number(form.elements?.id?.value || 0) && !input.value.trim()) {
+      input.value = value;
+      input.placeholder = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   } catch (error) {
     console.error('Не удалось сформировать № ПК:', error);
     input.placeholder = 'Ошибка формирования № ПК';
   } finally {
     form.dataset.pkNumberLoading = '0';
   }
-  return true;
 }
 
 function scheduleFill() {
-  [0, 40, 120, 250].forEach(delay => {
+  [0, 30, 80, 160, 300, 600].forEach(delay => {
     setTimeout(() => void fillNewCaseNumber(), delay);
   });
 }
@@ -70,12 +70,14 @@ export function initGeneralCasePkNumber() {
   window.__generalCasePkNumberInitialized = true;
 
   document.addEventListener('click', event => {
-    if (!event.target.closest('[data-general-new]')) return;
-    const currentForm = document.querySelector('[data-general-form]');
-    if (currentForm instanceof HTMLFormElement) {
-      currentForm.dataset.pkNumberForNewCase = '0';
-      currentForm.dataset.pkNumberLoading = '0';
-    }
-    scheduleFill();
+    if (event.target.closest('[data-general-new]')) scheduleFill();
   }, true);
+
+  const dialog = document.querySelector('[data-general-dialog]');
+  if (dialog) {
+    new MutationObserver(() => scheduleFill()).observe(dialog, {
+      attributes: true,
+      attributeFilter: ['open', 'class']
+    });
+  }
 }
