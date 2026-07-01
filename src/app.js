@@ -7,6 +7,7 @@ import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
 import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
 import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.js';
 import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js';
+import { initGeneralCaseCancellationUi } from './modules/cases/generalCaseCancellationUi.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -50,6 +51,7 @@ export function initApp() {
     initAppealActionCleanup();
     initLegalFieldSuggestions();
     initGeneralCasesPage();
+    initGeneralCaseCancellationUi();
     initControlledCasesPage();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
