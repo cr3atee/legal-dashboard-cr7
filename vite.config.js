@@ -31,7 +31,7 @@ export default defineConfig({
   plugins: [{
     name: 'sqlite-api-dev',
     configureServer(server) {
-      const { handleApiRequest, ensureSchema } = require('./server/sqliteApi.cjs');
+      const { handleApiRequest, ensureSchema } = require('./server/apiRouter.cjs');
       const dbPath = path.resolve(process.cwd(), 'data/app.db');
       void ensureSchema(dbPath).catch(error => console.error('SQLite schema initialization error', error));
       server.middlewares.use(async (req, res, next) => {
