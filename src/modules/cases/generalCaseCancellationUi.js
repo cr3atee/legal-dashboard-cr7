@@ -28,12 +28,10 @@ async function requestJson(url, options = {}) {
 function ensureButton(form) {
   let button = form.querySelector('[data-general-cancel-case]');
   if (button) return button;
-
   button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn small general-case-cancel-button';
   button.dataset.generalCancelCase = '1';
-
   const submit = form.querySelector('button[type="submit"]');
   const actions = submit?.parentElement || form;
   actions.insertBefore(button, submit || null);
@@ -44,7 +42,6 @@ async function syncCancellationUi() {
   const session = readSession();
   const form = document.querySelector('[data-general-form]');
   if (!(form instanceof HTMLFormElement)) return;
-
   const button = ensureButton(form);
   const id = Number(form.elements?.id?.value || 0);
   const isAdmin = Number(session.role_level || 0) >= 2;
@@ -58,13 +55,11 @@ async function syncCancellationUi() {
     button.textContent = cancelled ? 'Вернуть дело' : 'Отменить дело';
     button.classList.toggle('restore', cancelled);
     button.classList.toggle('danger', !cancelled);
-
     const badge = document.querySelector('[data-general-dialog] .case-dialog-active-dot');
     if (badge) {
       badge.textContent = cancelled ? '● Отменённое дело' : '● Активное дело';
       badge.classList.toggle('is-cancelled', cancelled);
     }
-
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.hidden = cancelled;
   } catch (error) {
@@ -73,11 +68,38 @@ async function syncCancellationUi() {
   }
 }
 
+async function decorateCancelledCases() {
+  if (Number(readSession().role_level || 0) < 2) return;
+  try {
+    const rows = await requestJson('/api/general-cases');
+    const cancelledIds = new Set((Array.isArray(rows) ? rows : [])
+      .filter(row => Number(row.cancelled_flag || 0) === 1)
+      .map(row => String(row.id)));
+
+    document.querySelectorAll('[data-general-card], [data-general-row]').forEach(node => {
+      const id = String(node.dataset.generalCard || node.dataset.generalRow || '');
+      const cancelled = cancelledIds.has(id);
+      node.classList.toggle('is-cancelled-case', cancelled);
+      let badge = node.querySelector('[data-cancelled-case-badge]');
+      if (cancelled && !badge) {
+        badge = document.createElement('span');
+        badge.dataset.cancelledCaseBadge = '1';
+        badge.className = 'case-badge cancelled';
+        badge.textContent = 'Отменённое';
+        const host = node.querySelector('.general-case-badges, .general-cases-table-badges') || node.firstElementChild || node;
+        host.append(badge);
+      }
+      if (!cancelled) badge?.remove();
+    });
+  } catch (error) {
+    console.error('Не удалось оформить отменённые дела:', error);
+  }
+}
+
 async function toggleCancellation(button) {
   const form = button.closest('[data-general-form]');
   const id = Number(form?.elements?.id?.value || 0);
   if (!id) return;
-
   const cancelled = form.dataset.cancelledCase === '1';
   const question = cancelled
     ? 'Вернуть дело в активный общий перечень?'
@@ -93,6 +115,7 @@ async function toggleCancellation(button) {
     document.querySelector('[data-general-dialog]')?.close();
     window.dispatchEvent(new CustomEvent('general-cases:reload'));
     setTimeout(() => document.querySelector('[data-general-refresh]')?.click(), 50);
+    setTimeout(() => void decorateCancelledCases(), 180);
   } catch (error) {
     window.alert(error.message || 'Не удалось изменить статус дела');
   } finally {
@@ -117,5 +140,7 @@ export function initGeneralCaseCancellationUi() {
     }
   }, true);
 
-  new MutationObserver(() => void syncCancellationUi()).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('general-cases:updated', () => setTimeout(() => void decorateCancelledCases(), 50));
+  window.addEventListener('general-cases:reload', () => setTimeout(() => void decorateCancelledCases(), 180));
+  setTimeout(() => void decorateCancelledCases(), 250);
 }
