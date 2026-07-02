@@ -5,7 +5,8 @@ let initialized = false;
 let users = [];
 let activeTaskId = '';
 let previousTasks = new Map();
-const LOG_PREFIX = 'legal-dashboard-calendar-audit-v2:';
+let baselineReady = false;
+const LOG_PREFIX = 'legal-dashboard-calendar-audit-v3:';
 
 function isCalendarAdmin() {
   const level = Number(getAuthSession()?.role_level || 0);
@@ -45,8 +46,8 @@ function writeLogById(id, rows) {
 function appendLogById(id, entry) {
   if (!id) return;
   const rows = readLogById(id);
-  const previous = rows[rows.length - 1];
   const next = { recorded_at: new Date().toISOString(), ...entry };
+  const previous = rows[rows.length - 1];
   if (previous
     && previous.date === next.date
     && previous.time === next.time
@@ -64,7 +65,7 @@ function currentSnapshot(form) {
   const type = typeSelect?.selectedOptions?.[0]?.textContent?.trim() || typeSelect?.value || '';
   const executorSelect = form.querySelector('[data-calendar-executor-field]');
   const executor = executorSelect?.selectedOptions?.[0]?.textContent?.trim() || executorSelect?.value || '';
-  return { date, time, type, executor, action: 'Изменение карточки' };
+  return { date, time, type, executor, action: 'Карточка изменена' };
 }
 
 function appendFormLog(form) {
@@ -79,6 +80,7 @@ function taskSnapshot(task = {}) {
     time: String(task.time || task.start_time || ''),
     type: String(task.type || task.task_type || task.kind || ''),
     executor: String(task.executor || task.user_name || task.user || task.assignee || ''),
+    created_at: String(task.created_at || task.createdAt || ''),
   };
 }
 
@@ -90,7 +92,17 @@ function trackCalendarChanges(tasks = []) {
     const next = taskSnapshot(task);
     nextMap.set(id, next);
     const previous = previousTasks.get(id);
-    if (!previous) continue;
+
+    if (!previous) {
+      if (baselineReady && !readLogById(id).length) {
+        appendLogById(id, {
+          ...next,
+          recorded_at: next.created_at || new Date().toISOString(),
+          action: 'Запись создана',
+        });
+      }
+      continue;
+    }
 
     const dateChanged = previous.date !== next.date;
     const timeChanged = previous.time !== next.time;
@@ -98,15 +110,23 @@ function trackCalendarChanges(tasks = []) {
     const executorChanged = previous.executor !== next.executor;
     if (!dateChanged && !timeChanged && !typeChanged && !executorChanged) continue;
 
+    let action = 'Запись изменена';
+    if (dateChanged) action = `Перенесено: ${previous.date || 'без даты'} → ${next.date || 'без даты'}`;
+    else if (timeChanged) action = `Изменено время: ${previous.time || 'не указано'} → ${next.time || 'не указано'}`;
+    else if (typeChanged) action = `Изменён тип: ${previous.type || 'не указан'} → ${next.type || 'не указан'}`;
+    else if (executorChanged) action = `Изменён исполнитель: ${previous.executor || 'не указан'} → ${next.executor || 'не указан'}`;
+
     appendLogById(id, {
       ...next,
-      action: dateChanged ? `Перенос: ${previous.date || 'без даты'} → ${next.date || 'без даты'}` : 'Изменение календарной записи',
+      action,
       previous_date: previous.date,
       previous_time: previous.time,
       previous_type: previous.type,
+      previous_executor: previous.executor,
     });
   }
   previousTasks = nextMap;
+  baselineReady = true;
 }
 
 async function loadUsers() {
@@ -154,6 +174,40 @@ function injectExecutor(form) {
   });
 }
 
+function historyRowsHtml(id) {
+  const rows = readLogById(id).slice().reverse();
+  return rows.length ? rows.map(row => `
+    <div class="calendar-audit-row">
+      <strong>${escapeHtml(row.action || 'Изменение')}</strong>
+      <small>${escapeHtml(formatDateTime(row.recorded_at))}</small>
+      <span>Дата: ${escapeHtml(row.date || 'не указана')}</span>
+      <span>Время: ${escapeHtml(row.time || 'не указано')}</span>
+      <span>Тип записи: ${escapeHtml(row.type || 'не указан')}</span>
+      ${row.executor ? `<span>Исполнитель: ${escapeHtml(row.executor)}</span>` : ''}
+    </div>
+  `).join('') : '<div class="calendar-audit-empty">История изменений пока отсутствует.</div>';
+}
+
+function injectInlineHistory() {
+  if (!isCalendarAdmin() || !activeTaskId) return;
+  const dialog = document.querySelector('[data-calendar-detail-dialog]');
+  const body = dialog?.querySelector('[data-calendar-detail-body]');
+  if (!dialog || !body) return;
+
+  body.querySelector('[data-calendar-inline-history]')?.remove();
+  const section = document.createElement('section');
+  section.className = 'calendar-inline-history';
+  section.dataset.calendarInlineHistory = '1';
+  section.innerHTML = `
+    <div class="calendar-inline-history-head">
+      <h4>История записи</h4>
+      <span>${readLogById(activeTaskId).length}</span>
+    </div>
+    <div class="calendar-audit-list">${historyRowsHtml(activeTaskId)}</div>
+  `;
+  body.append(section);
+}
+
 function ensureDialog() {
   let dialog = document.querySelector('[data-calendar-audit-dialog]');
   if (dialog) return dialog;
@@ -166,25 +220,13 @@ function ensureDialog() {
 
 function showLogById(id) {
   const dialog = ensureDialog();
-  const rows = readLogById(id).slice().reverse();
   dialog.innerHTML = `
     <div class="calendar-audit-card">
       <div class="calendar-audit-head">
-        <div><h3>Лог календарной записи</h3><p>История даты, времени и типа записи</p></div>
+        <div><h3>История календарной записи</h3><p>Создание, переносы и изменения</p></div>
         <button type="button" class="icon-button" data-calendar-audit-close>×</button>
       </div>
-      <div class="calendar-audit-list">
-        ${rows.length ? rows.map(row => `
-          <div class="calendar-audit-row">
-            <strong>${escapeHtml(row.action || 'Изменение')}</strong>
-            <small>${escapeHtml(formatDateTime(row.recorded_at))}</small>
-            <span>Дата записи: ${escapeHtml(row.date || 'не указана')}</span>
-            <span>Время: ${escapeHtml(row.time || 'не указано')}</span>
-            <span>Тип записи: ${escapeHtml(row.type || 'не указан')}</span>
-            ${row.executor ? `<span>Исполнитель: ${escapeHtml(row.executor)}</span>` : ''}
-          </div>
-        `).join('') : '<div class="calendar-audit-empty">История изменений пока отсутствует.</div>'}
-      </div>
+      <div class="calendar-audit-list">${historyRowsHtml(id)}</div>
       <div class="calendar-audit-actions"><button type="button" class="btn primary" data-calendar-audit-close>Закрыть</button></div>
     </div>`;
   dialog.querySelectorAll('[data-calendar-audit-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
@@ -199,22 +241,8 @@ function injectLogButton(form) {
   button.type = 'button';
   button.className = 'btn secondary calendar-audit-button';
   button.dataset.calendarAuditOpen = '1';
-  button.textContent = 'Лог изменений';
+  button.textContent = 'История изменений';
   button.addEventListener('click', () => showLogById(id));
-  actions.append(button);
-}
-
-function injectDetailLogButton() {
-  if (!isCalendarAdmin() || !activeTaskId) return;
-  const dialog = document.querySelector('[data-calendar-detail-dialog]');
-  if (!dialog || dialog.querySelector('[data-calendar-detail-audit]')) return;
-  const actions = dialog.querySelector('.form-actions, .dialog-actions, footer') || dialog;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'btn secondary calendar-audit-button';
-  button.dataset.calendarDetailAudit = '1';
-  button.textContent = 'Лог изменений';
-  button.addEventListener('click', () => showLogById(activeTaskId));
   actions.append(button);
 }
 
@@ -223,7 +251,6 @@ function enhanceForms(root = document) {
     injectExecutor(form);
     injectLogButton(form);
   });
-  injectDetailLogButton();
 }
 
 function escapeHtml(value) {
@@ -250,6 +277,7 @@ export function initCalendarExecutorAudit() {
   window.addEventListener('calendar:updated', event => {
     trackCalendarChanges(event.detail?.tasks || []);
     enhanceForms();
+    if (activeTaskId) setTimeout(() => injectInlineHistory(), 0);
   });
 
   document.addEventListener('submit', event => {
@@ -262,7 +290,8 @@ export function initCalendarExecutorAudit() {
     const taskNode = event.target.closest?.('[data-calendar-task-id], [data-calendar-week-task-id]');
     if (taskNode) {
       activeTaskId = String(taskNode.dataset.calendarTaskId || taskNode.dataset.calendarWeekTaskId || '');
-      setTimeout(() => injectDetailLogButton(), 0);
+      setTimeout(() => injectInlineHistory(), 30);
+      setTimeout(() => injectInlineHistory(), 160);
     }
 
     if (event.target.closest?.('[data-calendar-task-form] [type="submit"], [data-calendar-task-form] [data-calendar-save]')) {
