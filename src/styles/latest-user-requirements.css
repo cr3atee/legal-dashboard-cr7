@@ -14,6 +14,12 @@
 .latest-report-dialog-body { display:grid; gap:8px; max-height:60vh; overflow-y:auto; margin-top:16px; }
 .latest-report-dialog-body button { display:grid; gap:5px; width:100%; border:1px solid #dbe5f1; border-radius:12px; padding:12px 14px; background:#f8faff; text-align:left; }
 
+/* Daily reports: remove the top hearings and overdue KPI cards completely. */
+[data-reports-root][data-reports-mode="day"] [data-reports-day-kpis],
+[data-reports-root] [data-reports-day-kpis] {
+  display:none !important;
+}
+
 /* Notifications: four compact actions in a two-by-two grid. */
 #notificationsPanel {
   width:min(760px, calc(100vw - 32px));
