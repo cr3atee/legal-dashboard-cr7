@@ -55,14 +55,21 @@ function getVisibleChartRows(root) {
 function buildChartHtml(rows) {
   if (!rows.length) return '<p style="text-align:center;color:#475569;padding:40px 0">Нет данных по структуре дел за выбранный период</p>';
   const max = Math.max(...rows.map(row => row.value), 1);
-  return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:18px 0 26px"><tr>${rows.map(row => {
+  const valueRow = rows.map(row => `<td style="border:0;text-align:center;font-weight:700;padding:0 6pt 7pt">${escapeHtml(row.valueText)}</td>`).join('');
+  const barsRow = rows.map(row => {
     const height = Math.max(18, Math.round(row.value / max * 220));
-    return `<td style="vertical-align:bottom;text-align:center;padding:0 8px;border:0">
-      <div style="font-weight:700;margin-bottom:8px">${escapeHtml(row.valueText)}</div>
-      <div style="height:${height}px;background:${escapeHtml(row.color)};width:46px;margin:0 auto"></div>
-      <div style="margin-top:8px;font-size:10pt;line-height:1.2">${escapeHtml(row.category)}</div>
+    return `<td style="border:0;vertical-align:bottom;text-align:center;padding:0 6pt;height:230px">
+      <table align="center" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:46px;height:${height}px">
+        <tr style="height:${height}px"><td bgcolor="${escapeHtml(row.color)}" style="background-color:${escapeHtml(row.color)};height:${height}px;width:46px;border:0;font-size:1px;line-height:1px">&nbsp;</td></tr>
+      </table>
     </td>`;
-  }).join('')}</tr></table>`;
+  }).join('');
+  const labelsRow = rows.map(row => `<td style="border:0;text-align:center;padding:8pt 6pt 0;font-size:10pt;line-height:1.2">${escapeHtml(row.category)}</td>`).join('');
+  return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;table-layout:fixed;margin:18pt 0 24pt">
+    <tr>${valueRow}</tr>
+    <tr style="height:230px">${barsRow}</tr>
+    <tr>${labelsRow}</tr>
+  </table>`;
 }
 
 function buildWordHtml(root) {
