@@ -1,21 +1,30 @@
 let initialized = false;
 
+const STATUS_LABELS = [
+  'явочное дело',
+  'контрольное дело',
+  'отзыв показать',
+  'аварийный фонд',
+  'выморочка',
+  'выморочное дело',
+  'иск прокурора'
+];
+
 function normalizeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('ru-RU');
 }
 
-function isAttendanceControl(node) {
+function isCaseStatusControl(node) {
   if (!(node instanceof HTMLElement)) return false;
+  if (!node.closest('#cases')) return false;
   const text = normalizeText(node.textContent);
-  if (!text.includes('явочное дело')) return false;
-  return Boolean(
-    node.matches('label, button, .case-badge, [role="button"], [data-case-attendance-badge]')
-    || node.querySelector('input[type="checkbox"]')
-  );
+  const hasKnownLabel = STATUS_LABELS.some(label => text.includes(label));
+  const hasCheckbox = Boolean(node.querySelector('input[type="checkbox"]'));
+  return hasKnownLabel && (hasCheckbox || node.matches('button, .case-badge, [role="button"]'));
 }
 
-function cleanAttendanceControl(node) {
-  if (!isAttendanceControl(node)) return;
+function cleanCaseStatusControl(node) {
+  if (!isCaseStatusControl(node)) return;
   node.classList.add('single-attendance-control');
 
   node.querySelectorAll('[data-single-attendance-icon]').forEach((icon, index) => {
@@ -36,20 +45,23 @@ function cleanAttendanceControl(node) {
   }
 }
 
-function refreshAttendanceControls(root = document) {
+function refreshCaseStatusControls(root = document) {
   const candidates = new Set();
-  root.querySelectorAll?.('label, button, .case-badge, [role="button"], [data-case-attendance-badge]').forEach(node => {
-    if (isAttendanceControl(node)) candidates.add(node);
+  root.querySelectorAll?.('#cases label, #cases button, #cases .case-badge, #cases [role="button"]').forEach(node => {
+    if (isCaseStatusControl(node)) candidates.add(node);
   });
-  candidates.forEach(cleanAttendanceControl);
+  candidates.forEach(cleanCaseStatusControl);
 }
 
 export function initAttendanceBadgeFix() {
   if (initialized) return;
   initialized = true;
 
-  refreshAttendanceControls();
-  window.addEventListener('general-cases:updated', () => requestAnimationFrame(() => refreshAttendanceControls()));
-  window.addEventListener('general-cases:reload', () => setTimeout(() => refreshAttendanceControls(), 80));
-  document.addEventListener('click', () => setTimeout(() => refreshAttendanceControls(), 40), true);
+  refreshCaseStatusControls();
+  window.addEventListener('general-cases:updated', () => requestAnimationFrame(() => refreshCaseStatusControls()));
+  window.addEventListener('general-cases:reload', () => setTimeout(() => refreshCaseStatusControls(), 80));
+  document.addEventListener('click', () => setTimeout(() => refreshCaseStatusControls(), 40), true);
+  document.addEventListener('change', event => {
+    if (event.target.closest?.('#cases')) setTimeout(() => refreshCaseStatusControls(), 20);
+  }, true);
 }
