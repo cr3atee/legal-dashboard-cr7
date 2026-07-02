@@ -1,3 +1,5 @@
+let cancelledIdsCache = new Set();
+
 function readSession() {
   try {
     return JSON.parse(sessionStorage.getItem('legal-dashboard-auth-session-v1') || '{}');
@@ -100,18 +102,26 @@ function setCancelledAppearance(id, cancelled) {
   });
 }
 
+function applyCachedDecorations() {
+  document.querySelectorAll('[data-general-card], [data-general-row]').forEach(node => {
+    const id = String(node.dataset.generalCard || node.dataset.generalRow || '');
+    setCancelledAppearance(id, cancelledIdsCache.has(id));
+  });
+}
+
+function updateCacheFromRows(rows) {
+  if (!Array.isArray(rows)) return;
+  cancelledIdsCache = new Set(rows
+    .filter(row => Number(row.cancelled_flag || 0) === 1)
+    .map(row => String(row.id)));
+}
+
 async function decorateCancelledCases() {
   if (Number(readSession().role_level || 0) < 2) return;
   try {
     const rows = await requestJson('/api/general-cases');
-    const cancelledIds = new Set((Array.isArray(rows) ? rows : [])
-      .filter(row => Number(row.cancelled_flag || 0) === 1)
-      .map(row => String(row.id)));
-
-    document.querySelectorAll('[data-general-card], [data-general-row]').forEach(node => {
-      const id = String(node.dataset.generalCard || node.dataset.generalRow || '');
-      setCancelledAppearance(id, cancelledIds.has(id));
-    });
+    updateCacheFromRows(rows);
+    applyCachedDecorations();
   } catch (error) {
     console.error('Не удалось оформить отменённые дела:', error);
   }
@@ -136,6 +146,8 @@ async function toggleCancellation(button) {
 
     const nextCancelled = !cancelled;
     form.dataset.cancelledCase = nextCancelled ? '1' : '0';
+    if (nextCancelled) cancelledIdsCache.add(String(id));
+    else cancelledIdsCache.delete(String(id));
     setCancelledAppearance(id, nextCancelled);
 
     const badge = document.querySelector('[data-general-dialog] .case-dialog-active-dot');
@@ -177,13 +189,30 @@ export function initGeneralCaseCancellationUi() {
       void toggleCancellation(toggle);
       return;
     }
+
     if (event.target.closest('[data-general-open], [data-general-new]')) {
       setTimeout(() => void syncCancellationUi(), 60);
       setTimeout(() => void syncCancellationUi(), 180);
     }
+
+    if (event.target.closest('[data-general-page], [data-general-view]')) {
+      setTimeout(() => applyCachedDecorations(), 0);
+      setTimeout(() => applyCachedDecorations(), 40);
+      setTimeout(() => applyCachedDecorations(), 120);
+    }
   }, true);
 
-  window.addEventListener('general-cases:updated', () => setTimeout(() => void decorateCancelledCases(), 50));
+  document.addEventListener('change', event => {
+    if (event.target.closest?.('[data-general-type-filter], [data-general-procedural-position-filter], [data-general-dispute-category-filter]')) {
+      setTimeout(() => applyCachedDecorations(), 0);
+      setTimeout(() => applyCachedDecorations(), 80);
+    }
+  }, true);
+
+  window.addEventListener('general-cases:updated', event => {
+    updateCacheFromRows(event.detail);
+    applyCachedDecorations();
+  });
   window.addEventListener('general-cases:reload', () => setTimeout(() => void decorateCancelledCases(), 180));
   setTimeout(() => void decorateCancelledCases(), 250);
 }
