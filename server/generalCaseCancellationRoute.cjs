@@ -144,13 +144,13 @@ async function setCancelled(db, id, cancelled, userName) {
     const now = new Date().toISOString();
     if (cancelled) {
       await run(db, `UPDATE general_cases
-        SET cancelled_flag=1, cancelled_at=?, cancelled_by=?, updated_at=?
-        WHERE id=?`, [now, userName, now, id]);
+        SET cancelled_flag=1, cancelled_at=?, cancelled_by=?
+        WHERE id=?`, [now, userName, id]);
       await removeCaseFromReports(db, id);
     } else {
       await run(db, `UPDATE general_cases
-        SET cancelled_flag=0, cancelled_at='', cancelled_by='', updated_at=?
-        WHERE id=?`, [now, id]);
+        SET cancelled_flag=0, cancelled_at='', cancelled_by=''
+        WHERE id=?`, [id]);
       await restoreCaseReportEvents(db, id);
     }
     await run(db, 'COMMIT');
@@ -184,7 +184,7 @@ async function handleGeneralCaseCancellation(req, res, url, dbPath) {
           return searchParts.every(part => text.includes(part));
         });
       }
-      rows.sort((a, b) => Number(a.cancelled_flag || 0) - Number(b.cancelled_flag || 0) || Number(b.id || 0) - Number(a.id || 0));
+      rows.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
       sendJson(res, 200, rows.slice(0, 2000));
       return true;
     }
