@@ -45,6 +45,14 @@ function ensureButton(form) {
   return button;
 }
 
+function syncSubmitState(form, cancelled) {
+  const submit = form?.querySelector('button[type="submit"]');
+  if (!submit) return;
+  submit.hidden = cancelled;
+  submit.disabled = cancelled;
+  submit.setAttribute('aria-hidden', cancelled ? 'true' : 'false');
+}
+
 async function syncCancellationUi() {
   const session = readSession();
   const form = document.querySelector('[data-general-form]');
@@ -67,8 +75,7 @@ async function syncCancellationUi() {
       badge.textContent = cancelled ? '● Отменённое дело' : '● Активное дело';
       badge.classList.toggle('is-cancelled', cancelled);
     }
-    const submit = form.querySelector('button[type="submit"]');
-    if (submit) submit.hidden = cancelled;
+    syncSubmitState(form, cancelled);
   } catch (error) {
     console.error('Не удалось определить статус дела:', error);
     button.hidden = true;
@@ -137,8 +144,7 @@ async function toggleCancellation(button) {
       badge.classList.toggle('is-cancelled', nextCancelled);
     }
 
-    const submit = form.querySelector('button[type="submit"]');
-    if (submit) submit.hidden = nextCancelled;
+    syncSubmitState(form, nextCancelled);
     button.textContent = nextCancelled ? 'Вернуть дело' : 'Отменить дело';
     button.classList.toggle('restore', nextCancelled);
     button.classList.toggle('danger', !nextCancelled);
@@ -154,6 +160,15 @@ async function toggleCancellation(button) {
 export function initGeneralCaseCancellationUi() {
   if (window.__generalCaseCancellationUiInitialized) return;
   window.__generalCaseCancellationUiInitialized = true;
+
+  document.addEventListener('submit', event => {
+    const form = event.target.closest?.('[data-general-form]');
+    if (!form || form.dataset.cancelledCase !== '1') return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    document.querySelector('[data-general-dialog]')?.close();
+  }, true);
 
   document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-general-cancel-case]');
