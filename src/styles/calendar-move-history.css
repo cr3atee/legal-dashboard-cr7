@@ -1,0 +1,13 @@
+#calendar .calendar-executor-field { display:grid; gap:7px; }
+#calendar .calendar-executor-field > span { font-weight:700; color:#31415f; }
+#calendar .calendar-executor-field select { width:100%; min-height:44px; border:1px solid #d7e1ee; border-radius:12px; padding:0 12px; background:#fff; color:#1f2c45; font:inherit; }
+.calendar-move-history { margin-top:18px; padding:16px; border:1px solid #dbe5f1; border-radius:16px; background:#f8faff; }
+.calendar-move-history-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.calendar-move-history-head h4 { margin:0; font-size:17px; color:#1f2c45; }
+.calendar-move-history-head span { display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 8px; border-radius:999px; background:#e8f0ff; color:#2453b6; font-weight:700; }
+.calendar-move-history-list { display:grid; gap:10px; margin-top:12px; max-height:260px; overflow:auto; }
+.calendar-move-history-row { display:grid; gap:5px; padding:12px 14px; border:1px solid #dbe5f1; border-radius:12px; background:#fff; }
+.calendar-move-history-row strong { color:#173a7a; }
+.calendar-move-history-row small { color:#71809a; }
+.calendar-move-history-row span { font-size:14px; color:#31415f; }
+.calendar-move-history-empty { padding:18px; text-align:center; color:#71809a; }
