@@ -1,4 +1,5 @@
 import { dbApi } from '../../api/dbApi.js';
+import { initAttendanceBadgeFix } from './attendanceBadgeFix.js';
 
 let userNames = [];
 let initialized = false;
@@ -104,6 +105,7 @@ function executorInput(target) {
 export function initGeneralCaseExecutorSuggestions() {
   if (initialized) return;
   initialized = true;
+  initAttendanceBadgeFix();
   void loadUsers();
 
   document.addEventListener('input', event => {
