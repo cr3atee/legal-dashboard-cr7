@@ -5,7 +5,7 @@ const LOG_PREFIX = 'legal-dashboard-calendar-audit-v3:';
 
 function canViewHistory() {
   const level = Number(getAuthSession()?.role_level || 0);
-  return level >= 2 && level <= 3;
+  return level >= 2;
 }
 
 function taskId(form) {
@@ -96,6 +96,11 @@ export function initCalendarFormHistory() {
   observer.observe(document.body, { childList: true, subtree: true });
 
   window.addEventListener('calendar:updated', () => refresh());
+  window.addEventListener('calendar:audit-updated', () => {
+    refresh();
+    setTimeout(() => refresh(), 120);
+  });
+
   document.addEventListener('click', event => {
     if (event.target.closest?.('[data-calendar-task-id], [data-calendar-week-task-id], [data-calendar-save]')) {
       setTimeout(() => refresh(), 80);
