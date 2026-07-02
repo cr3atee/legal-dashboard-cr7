@@ -1,6 +1,7 @@
 import { dbApi } from '../../api/dbApi.js';
 import { initAttendanceBadgeFix } from './attendanceBadgeFix.js';
 import { initGeneralCaseCategorySubjectOrder } from './generalCaseCategorySubjectOrder.js';
+import { initCasePkLinking } from './casePkLinking.js';
 
 let userNames = [];
 let initialized = false;
@@ -106,6 +107,7 @@ function executorInput(target) {
 export function initGeneralCaseExecutorSuggestions() {
   if (initialized) return;
   initialized = true;
+  initCasePkLinking();
   initAttendanceBadgeFix();
   initGeneralCaseCategorySubjectOrder();
   void loadUsers();
