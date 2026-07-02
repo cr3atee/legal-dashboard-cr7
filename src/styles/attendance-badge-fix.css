@@ -56,14 +56,14 @@
 
 #cases .single-attendance-icon::before {
   left: 7px;
-  top: 15px;
+  top: 13px;
   width: 8px;
   transform: rotate(45deg);
 }
 
 #cases .single-attendance-icon::after {
   left: 12px;
-  top: 20px;
+  top: 18px;
   width: 14px;
   transform: rotate(-45deg);
 }
