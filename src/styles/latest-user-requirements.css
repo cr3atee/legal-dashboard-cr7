@@ -139,6 +139,14 @@
   100% { transform:translate(3px,-10px) rotate(18deg); }
 }
 
+/* General cases table: slightly larger status dots. */
+#cases .general-cases-table .case-table-marker {
+  width:13px;
+  height:13px;
+  min-width:13px;
+  min-height:13px;
+}
+
 @media (max-width:620px) {
   #notificationsPanel .notifications-toolbar {
     grid-template-columns:1fr;
