@@ -24,7 +24,6 @@ import { initMeetingsWorkflowUi } from './modules/meetings/meetingsWorkflowUi.js
 import { initReportsPage } from './modules/reports/reportsController.js';
 import { initReportsCalendarDetails } from './modules/reports/reportsCalendarDetails.js';
 import { initReportsQuarterController } from './modules/reports/reportsQuarterController.js';
-import { initReportChartClipboard } from './modules/reports/reportChartClipboard.js';
 import { initAdminUsersPage } from './modules/adminUsers/adminUsersController.js';
 import { initAdminDictionariesPage } from './modules/adminDictionaries/adminDictionariesController.js';
 import { initMapFullscreenButton } from './modules/map/mapFullscreen.js';
@@ -68,7 +67,6 @@ export function initApp() {
     initReportsPage();
     initReportsCalendarDetails();
     initReportsQuarterController();
-    initReportChartClipboard();
     initAdminUsersPage();
     initAdminDictionariesPage();
     initMapFullscreenButton();
