@@ -1,7 +1,7 @@
 import './styles/user-requested-enhancements.css';
 import './styles/latest-user-requirements.css';
 import './styles/executor-suggestions-fix.css';
-import './styles/calendar-executor-audit.css';
+import './styles/calendar-move-history.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
@@ -18,7 +18,7 @@ import { initEnforcementPage } from './modules/enforcement/enforcementController
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
-import { initCalendarExecutorAudit } from './modules/calendar/calendarExecutorAudit.js';
+import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
@@ -64,7 +64,7 @@ export function initApp() {
     initCalendarSelectedUserOnly();
     initCalendarPage();
     initCalendarTimeLabel();
-    initCalendarExecutorAudit();
+    initCalendarMoveHistory();
     initSchedulePage();
     initEmergencyFundPage();
     initMunicipalRegistryPage();
