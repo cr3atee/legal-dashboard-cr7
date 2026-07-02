@@ -1,0 +1,20 @@
+[data-general-form] input[name="executor"]::-webkit-calendar-picker-indicator,
+[data-general-form] [data-general-executor]::-webkit-calendar-picker-indicator {
+  display:none !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+
+[data-general-form] input[name="executor"]::-webkit-list-button,
+[data-general-form] [data-general-executor]::-webkit-list-button {
+  display:none !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+
+[data-general-form] input[name="executor"],
+[data-general-form] [data-general-executor] {
+  appearance:textfield;
+  -webkit-appearance:textfield;
+  background-image:none !important;
+}
