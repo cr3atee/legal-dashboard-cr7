@@ -147,6 +147,44 @@
   min-height:13px;
 }
 
+/* General case executor suggestions from system users. */
+[data-general-form] label:has(input[name="executor"]),
+[data-general-form] label:has([data-general-executor]) {
+  position:relative;
+}
+.general-executor-suggestions {
+  position:absolute;
+  z-index:50;
+  top:calc(100% + 6px);
+  left:0;
+  right:0;
+  max-height:240px;
+  overflow:auto;
+  padding:6px;
+  border:1px solid #d7e1ee;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 16px 36px rgba(31,44,69,.16);
+}
+.general-executor-suggestions[hidden] { display:none !important; }
+.general-executor-suggestions button {
+  display:block;
+  width:100%;
+  padding:10px 12px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#1f2c45;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.general-executor-suggestions button:hover,
+.general-executor-suggestions button:focus {
+  outline:none;
+  background:#eef4ff;
+}
+
 @media (max-width:620px) {
   #notificationsPanel .notifications-toolbar {
     grid-template-columns:1fr;
