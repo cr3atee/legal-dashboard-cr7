@@ -1,48 +1,69 @@
-#cases .case-badge.attendance,
-#cases .case-dialog-attendance-badge,
-#cases [data-case-attendance-badge] {
-  display: inline-flex;
+#cases .single-attendance-control {
+  position: relative;
+  display: inline-flex !important;
   align-items: center;
   gap: 10px;
   background-image: none !important;
 }
 
-#cases .case-badge.attendance > svg,
-#cases .case-badge.attendance > i,
-#cases .case-badge.attendance > .icon,
-#cases .case-dialog-attendance-badge > svg,
-#cases .case-dialog-attendance-badge > i,
-#cases .case-dialog-attendance-badge > .icon,
-#cases [data-case-attendance-badge] > svg,
-#cases [data-case-attendance-badge] > i,
-#cases [data-case-attendance-badge] > .icon {
-  display: none !important;
-}
-
-#cases .case-badge.attendance::before,
-#cases .case-dialog-attendance-badge::before,
-#cases [data-case-attendance-badge]::before {
-  content: '' !important;
-  display: inline-block !important;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  box-sizing: border-box;
-  border: 2px solid rgba(255,255,255,.95);
-  border-radius: 8px;
-  background-color: rgba(255,255,255,.08) !important;
-  background-image:
-    linear-gradient(45deg, transparent 44%, #fff 45%, #fff 58%, transparent 59%),
-    linear-gradient(-45deg, transparent 43%, #fff 44%, #fff 56%, transparent 57%) !important;
-  background-repeat: no-repeat !important;
-  background-size: 11px 9px, 16px 12px !important;
-  background-position: 5px 12px, 10px 8px !important;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.22), 0 2px 7px rgba(0,42,145,.22);
-}
-
-#cases .case-badge.attendance::after,
-#cases .case-dialog-attendance-badge::after,
-#cases [data-case-attendance-badge]::after {
+#cases .single-attendance-control::before,
+#cases .single-attendance-control::after {
   content: none !important;
   display: none !important;
+}
+
+#cases .single-attendance-control input[type="checkbox"] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  appearance: none !important;
+}
+
+#cases .single-attendance-control > svg,
+#cases .single-attendance-control > i,
+#cases .single-attendance-control > .icon,
+#cases .single-attendance-control > .checkbox-icon,
+#cases .single-attendance-control > .check-icon,
+#cases .single-attendance-control > .checkmark {
+  display: none !important;
+}
+
+#cases .single-attendance-icon {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2), 0 2px 7px rgba(0,42,145,.22);
+}
+
+#cases .single-attendance-icon::before,
+#cases .single-attendance-icon::after {
+  content: '';
+  position: absolute;
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  background: #fff;
+  transform-origin: left center;
+}
+
+#cases .single-attendance-icon::before {
+  left: 7px;
+  top: 15px;
+  width: 8px;
+  transform: rotate(45deg);
+}
+
+#cases .single-attendance-icon::after {
+  left: 12px;
+  top: 20px;
+  width: 14px;
+  transform: rotate(-45deg);
 }
