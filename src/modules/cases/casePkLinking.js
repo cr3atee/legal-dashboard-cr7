@@ -33,6 +33,26 @@ function findByPk(rows, value, getter, excludeId = 0) {
   ) || null;
 }
 
+function findById(rows, id) {
+  return (Array.isArray(rows) ? rows : []).find(row => Number(row.id || 0) === Number(id || 0)) || null;
+}
+
+async function inspectPk(value) {
+  const key = normalizePk(value);
+  if (!key) throw new Error('Укажите уникальный № ПК');
+  const [generalRows, controlledRows] = await Promise.all([
+    dbApi.getGeneralCases().catch(() => []),
+    dbApi.getControlledCases().catch(() => [])
+  ]);
+  return { generalRows, controlledRows };
+}
+
+function assertPkUnchanged(currentValue, nextValue) {
+  if (normalizePk(currentValue) !== normalizePk(nextValue)) {
+    throw new Error('№ ПК является уникальным идентификатором дела и не может быть изменён после создания');
+  }
+}
+
 function generalToControlled(row = {}) {
   return {
     general_case_id: Number(row.id || row.general_case_id || 0) || null,
@@ -68,57 +88,32 @@ function mergeDefined(base = {}, patch = {}) {
   return result;
 }
 
-async function ensureUniquePk({ value, generalId = 0, controlledId = 0 }) {
-  const key = normalizePk(value);
-  if (!key) throw new Error('Укажите уникальный № ПК');
-
-  const [generalRows, controlledRows] = await Promise.all([
-    dbApi.getGeneralCases().catch(() => []),
-    dbApi.getControlledCases().catch(() => [])
-  ]);
-
-  const duplicateGeneral = findByPk(generalRows, value, pkFromGeneral, generalId);
-  const duplicateControlled = findByPk(controlledRows, value, pkFromControlled, controlledId);
-
-  if (duplicateGeneral && Number(duplicateGeneral.id) !== Number(generalId || 0)) {
-    throw new Error(`Дело с № ПК ${displayPk(value)} уже существует в общем перечне`);
-  }
-  if (duplicateControlled && Number(duplicateControlled.id) !== Number(controlledId || 0)) {
-    const linkedGeneralId = Number(duplicateControlled.general_case_id || 0);
-    if (!generalId || linkedGeneralId !== Number(generalId)) {
-      throw new Error(`Дело с № ПК ${displayPk(value)} уже существует в контрольных делах`);
-    }
-  }
-
-  return { generalRows, controlledRows };
-}
-
 async function syncGeneralToControlled(saved, source = {}) {
   const pk = pkFromGeneral(saved) || pkFromGeneral(source);
-  if (!normalizePk(pk)) return;
+  if (!normalizePk(pk)) return null;
   const controlledRows = await dbApi.getControlledCases().catch(() => []);
-  const existing = findByPk(controlledRows, pk, pkFromControlled);
+  const existing = controlledRows.find(row => Number(row.general_case_id || 0) === Number(saved.id || 0))
+    || findByPk(controlledRows, pk, pkFromControlled);
   const payload = generalToControlled(mergeDefined(source, saved));
 
   if (existing) {
-    await originals.updateControlledCase(existing.id, mergeDefined(existing, payload));
-  } else {
-    await originals.createControlledCase(payload);
+    return originals.updateControlledCase(existing.id, mergeDefined(existing, payload));
   }
+  return originals.createControlledCase(payload);
 }
 
 async function syncControlledToGeneral(saved, source = {}) {
   const pk = pkFromControlled(saved) || pkFromControlled(source);
-  if (!normalizePk(pk)) return;
+  if (!normalizePk(pk)) return null;
   const generalRows = await dbApi.getGeneralCases().catch(() => []);
-  const existing = findByPk(generalRows, pk, pkFromGeneral);
+  const existing = generalRows.find(row => Number(row.controlled_case_id || 0) === Number(saved.id || 0))
+    || findByPk(generalRows, pk, pkFromGeneral);
   const payload = controlledToGeneral(mergeDefined(source, saved));
 
   if (existing) {
-    await originals.updateGeneralCase(existing.id, mergeDefined(existing, payload));
-  } else {
-    await originals.createGeneralCase(payload);
+    return originals.updateGeneralCase(existing.id, mergeDefined(existing, payload));
   }
+  return originals.createGeneralCase(payload);
 }
 
 async function resolveGeneralCaseId(data = {}) {
@@ -128,6 +123,42 @@ async function resolveGeneralCaseId(data = {}) {
   if (!normalizePk(pk)) return null;
   const rows = await dbApi.getGeneralCases().catch(() => []);
   return Number(findByPk(rows, pk, pkFromGeneral)?.id || 0) || null;
+}
+
+function lockPkField(form, field) {
+  if (!(form instanceof HTMLFormElement) || !(field instanceof HTMLInputElement)) return;
+  const id = String(form.elements?.id?.value || '').trim();
+  const editing = Boolean(id);
+
+  if (editing) {
+    field.readOnly = true;
+    field.classList.add('is-pk-locked');
+    field.title = '№ ПК нельзя изменить после создания дела';
+    field.setAttribute('aria-readonly', 'true');
+    field.dataset.lockedPk = field.value;
+  } else {
+    field.readOnly = false;
+    field.classList.remove('is-pk-locked');
+    field.removeAttribute('title');
+    field.setAttribute('aria-readonly', 'false');
+    delete field.dataset.lockedPk;
+  }
+}
+
+function syncPkFieldLocks() {
+  const generalForm = document.querySelector('[data-general-form]');
+  const generalPk = generalForm?.querySelector('input[name="case_no"], input[name="pk_number"], input[name="case_number"]');
+  lockPkField(generalForm, generalPk);
+
+  const controlledForm = document.querySelector('[data-controlled-form]');
+  const controlledPk = controlledForm?.querySelector('input[name="case_number"], input[name="case_no"], input[name="pk_number"]');
+  lockPkField(controlledForm, controlledPk);
+}
+
+function schedulePkFieldLocks() {
+  setTimeout(syncPkFieldLocks, 0);
+  setTimeout(syncPkFieldLocks, 60);
+  setTimeout(syncPkFieldLocks, 180);
 }
 
 const originals = {};
@@ -148,7 +179,12 @@ export function initCasePkLinking() {
   dbApi.createGeneralCase = async data => {
     if (syncing) return originals.createGeneralCase(data);
     const pk = pkFromGeneral(data);
-    await ensureUniquePk({ value: pk });
+    const { generalRows } = await inspectPk(pk);
+    const duplicateGeneral = findByPk(generalRows, pk, pkFromGeneral);
+    if (duplicateGeneral) {
+      throw new Error(`Дело с № ПК ${displayPk(pk)} уже существует в общем перечне`);
+    }
+
     const saved = await originals.createGeneralCase({ ...data, case_no: displayPk(pk) });
     syncing = true;
     try {
@@ -157,17 +193,23 @@ export function initCasePkLinking() {
       syncing = false;
     }
     window.dispatchEvent(new CustomEvent('controlled-cases:reload'));
+    schedulePkFieldLocks();
     return saved;
   };
 
   dbApi.updateGeneralCase = async (id, data) => {
     if (syncing) return originals.updateGeneralCase(id, data);
-    const pk = pkFromGeneral(data);
-    const controlledRows = await dbApi.getControlledCases().catch(() => []);
-    const linked = controlledRows.find(row => Number(row.general_case_id || 0) === Number(id))
-      || findByPk(controlledRows, pk, pkFromControlled);
-    await ensureUniquePk({ value: pk, generalId: id, controlledId: linked?.id || 0 });
-    const saved = await originals.updateGeneralCase(id, { ...data, case_no: displayPk(pk) });
+    const { generalRows } = await inspectPk(pkFromGeneral(data));
+    const current = findById(generalRows, id);
+    const originalPk = pkFromGeneral(current) || pkFromGeneral(data);
+    assertPkUnchanged(originalPk, pkFromGeneral(data));
+
+    const duplicateGeneral = findByPk(generalRows, originalPk, pkFromGeneral, id);
+    if (duplicateGeneral) {
+      throw new Error(`Другое дело с № ПК ${displayPk(originalPk)} уже существует в общем перечне`);
+    }
+
+    const saved = await originals.updateGeneralCase(id, { ...data, case_no: displayPk(originalPk) });
     syncing = true;
     try {
       await syncGeneralToControlled(saved, data);
@@ -175,26 +217,42 @@ export function initCasePkLinking() {
       syncing = false;
     }
     window.dispatchEvent(new CustomEvent('controlled-cases:reload'));
+    schedulePkFieldLocks();
     return saved;
   };
 
   dbApi.createControlledCase = async data => {
     if (syncing) return originals.createControlledCase(data);
     const pk = pkFromControlled(data);
-    await ensureUniquePk({ value: pk });
+    const { generalRows, controlledRows } = await inspectPk(pk);
+    const duplicateControlled = findByPk(controlledRows, pk, pkFromControlled);
+    if (duplicateControlled) {
+      throw new Error(`Дело с № ПК ${displayPk(pk)} уже существует в контрольных делах`);
+    }
+
     syncing = true;
     try {
-      const general = await originals.createGeneralCase(controlledToGeneral(data));
+      let general = findByPk(generalRows, pk, pkFromGeneral);
+      if (general) {
+        general = await originals.updateGeneralCase(general.id, mergeDefined(general, controlledToGeneral(data)));
+      } else {
+        general = await originals.createGeneralCase(controlledToGeneral(data));
+      }
+
       const saved = await originals.createControlledCase({
         ...data,
         case_number: displayPk(pk),
         general_case_id: general.id
       });
+
       await originals.updateGeneralCase(general.id, mergeDefined(general, {
+        ...controlledToGeneral(saved),
         controlled_case_id: saved.id,
         control_flag: 1
       }));
+
       window.dispatchEvent(new CustomEvent('general-cases:reload'));
+      schedulePkFieldLocks();
       return saved;
     } finally {
       syncing = false;
@@ -203,16 +261,22 @@ export function initCasePkLinking() {
 
   dbApi.updateControlledCase = async (id, data) => {
     if (syncing) return originals.updateControlledCase(id, data);
-    const pk = pkFromControlled(data);
-    const generalRows = await dbApi.getGeneralCases().catch(() => []);
-    const linkedGeneral = generalRows.find(row => Number(row.controlled_case_id || 0) === Number(id))
-      || findByPk(generalRows, pk, pkFromGeneral);
-    await ensureUniquePk({ value: pk, controlledId: id, generalId: linkedGeneral?.id || 0 });
+    const { controlledRows } = await inspectPk(pkFromControlled(data));
+    const current = findById(controlledRows, id);
+    const originalPk = pkFromControlled(current) || pkFromControlled(data);
+    assertPkUnchanged(originalPk, pkFromControlled(data));
+
+    const duplicateControlled = findByPk(controlledRows, originalPk, pkFromControlled, id);
+    if (duplicateControlled) {
+      throw new Error(`Другое дело с № ПК ${displayPk(originalPk)} уже существует в контрольных делах`);
+    }
+
     const saved = await originals.updateControlledCase(id, {
       ...data,
-      case_number: displayPk(pk),
-      general_case_id: linkedGeneral?.id || data.general_case_id || null
+      case_number: displayPk(originalPk),
+      general_case_id: current?.general_case_id || data.general_case_id || null
     });
+
     syncing = true;
     try {
       await syncControlledToGeneral(saved, data);
@@ -220,6 +284,7 @@ export function initCasePkLinking() {
       syncing = false;
     }
     window.dispatchEvent(new CustomEvent('general-cases:reload'));
+    schedulePkFieldLocks();
     return saved;
   };
 
@@ -242,4 +307,22 @@ export function initCasePkLinking() {
     ...data,
     general_case_id: await resolveGeneralCaseId(data)
   });
+
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('[data-general-new], [data-general-open], [data-controlled-new], [data-controlled-open], [data-controlled-row], [data-controlled-card]')) {
+      schedulePkFieldLocks();
+    }
+  }, true);
+
+  document.addEventListener('input', event => {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement) || !field.classList.contains('is-pk-locked')) return;
+    if (field.dataset.lockedPk != null && field.value !== field.dataset.lockedPk) {
+      field.value = field.dataset.lockedPk;
+    }
+  }, true);
+
+  window.addEventListener('general-cases:updated', schedulePkFieldLocks);
+  window.addEventListener('controlled-cases:updated', schedulePkFieldLocks);
+  schedulePkFieldLocks();
 }
