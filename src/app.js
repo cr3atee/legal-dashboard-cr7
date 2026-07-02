@@ -1,5 +1,6 @@
 import './styles/user-requested-enhancements.css';
 import './styles/latest-user-requirements.css';
+import './styles/executor-suggestions-fix.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
