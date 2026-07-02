@@ -20,6 +20,11 @@
   display:none !important;
 }
 
+/* Dashboard today tasks: keep only time and bold title. */
+[data-calendar-today-widget] .calendar-today-only-task > div > span {
+  display:none !important;
+}
+
 /* Notifications: four compact actions in a two-by-two grid. */
 #notificationsPanel {
   width:min(760px, calc(100vw - 32px));
