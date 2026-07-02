@@ -20,7 +20,6 @@ import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelecte
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarExecutorAudit } from './modules/calendar/calendarExecutorAudit.js';
 import { initCalendarFormHistory } from './modules/calendar/calendarFormHistory.js';
-import { initCalendarMoveAuditBridge } from './modules/calendar/calendarMoveAuditBridge.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
@@ -68,7 +67,6 @@ export function initApp() {
     initCalendarTimeLabel();
     initCalendarExecutorAudit();
     initCalendarFormHistory();
-    initCalendarMoveAuditBridge();
     initSchedulePage();
     initEmergencyFundPage();
     initMunicipalRegistryPage();
