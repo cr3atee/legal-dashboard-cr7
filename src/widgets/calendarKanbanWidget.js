@@ -160,7 +160,6 @@ function renderTaskCard(task) {
         <span>${escapeHtml(getTaskType(task) || 'задача')}</span>
       </div>
       <strong>${escapeHtml(getTaskDescription(task) || task.assignment || task.subject || 'Без описания')}</strong>
-      <p>${escapeHtml(task.court || task.subject || task.assignment || '')}</p>
       ${done ? '<em>Исполнено</em>' : ''}
     </article>
   `;
