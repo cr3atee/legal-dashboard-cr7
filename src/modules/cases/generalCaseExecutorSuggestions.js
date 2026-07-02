@@ -1,5 +1,6 @@
 import { dbApi } from '../../api/dbApi.js';
 import { initAttendanceBadgeFix } from './attendanceBadgeFix.js';
+import { initGeneralCaseCategorySubjectOrder } from './generalCaseCategorySubjectOrder.js';
 
 let userNames = [];
 let initialized = false;
@@ -106,6 +107,7 @@ export function initGeneralCaseExecutorSuggestions() {
   if (initialized) return;
   initialized = true;
   initAttendanceBadgeFix();
+  initGeneralCaseCategorySubjectOrder();
   void loadUsers();
 
   document.addEventListener('input', event => {
