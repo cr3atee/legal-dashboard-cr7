@@ -1,0 +1,29 @@
+#cases [data-general-card].is-cancelled-case,
+#cases [data-general-row].is-cancelled-case {
+  filter: grayscale(1);
+  opacity: .58;
+}
+
+#cases [data-general-card].is-cancelled-case {
+  background: #f1f3f5 !important;
+  border-color: #cfd4da !important;
+  box-shadow: none !important;
+}
+
+#cases [data-general-row].is-cancelled-case > td {
+  background: #f1f3f5 !important;
+  color: #7a828c !important;
+}
+
+#cases [data-general-card].is-cancelled-case:hover,
+#cases [data-general-row].is-cancelled-case:hover {
+  opacity: .72;
+}
+
+#cases .is-cancelled-case .case-badge.cancelled {
+  filter: none;
+  opacity: 1;
+  background: #d8dde3;
+  border-color: #bcc3cb;
+  color: #626a74;
+}
