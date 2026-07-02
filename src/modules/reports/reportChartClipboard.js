@@ -6,160 +6,138 @@ function setReportStatus(message, isError = false) {
     node.textContent = message;
     node.classList.toggle('error', isError);
     node.hidden = false;
-    return;
+  } else if (isError) {
+    window.alert(message);
   }
-  if (isError) window.alert(message);
 }
 
-function extractChartRows(root) {
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function getPeriod(root) {
+  const quarter = root.querySelector('[data-reports-quarter] option:checked')?.textContent?.trim()
+    || root.querySelector('[data-reports-quarter]')?.value
+    || '';
+  const year = root.querySelector('[data-reports-year]')?.value || '';
+  return [quarter, year].filter(Boolean).join(' ');
+}
+
+function getVisibleTableRows(root) {
+  return [...root.querySelectorAll('[data-reports-structure-rows] tr')]
+    .map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.trim()))
+    .filter(cells => cells.length >= 5 && !cells.join(' ').includes('Нет данных'))
+    .map(cells => ({
+      category: cells[0],
+      subject: cells[1],
+      count: cells[2],
+      share: cells[3],
+      period: cells[4]
+    }));
+}
+
+function getVisibleChartRows(root) {
   return [...root.querySelectorAll('[data-reports-structure-chart] .reports-column-bar')]
-    .map(button => {
-      const label = button.querySelector('.reports-column-bar-label')?.textContent?.trim() || '';
-      const valueText = button.querySelector('b')?.textContent?.trim() || '0';
-      const value = Number((valueText.match(/-?\d+(?:[.,]\d+)?/)?.[0] || '0').replace(',', '.')) || 0;
-      const color = getComputedStyle(button).getPropertyValue('--category-color').trim() || '#2563eb';
-      return { label, value, valueText, color };
-    })
-    .filter(row => row.label);
+    .map(button => ({
+      category: button.querySelector('.reports-column-bar-label')?.textContent?.trim() || '',
+      valueText: button.querySelector('b')?.textContent?.trim() || '0',
+      value: Number((button.querySelector('b')?.textContent?.match(/\d+(?:[.,]\d+)?/)?.[0] || '0').replace(',', '.')) || 0,
+      color: getComputedStyle(button).getPropertyValue('--category-color').trim() || '#2f67e8'
+    }))
+    .filter(row => row.category);
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
-  const words = String(text || '').split(/\s+/).filter(Boolean);
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const next = line ? `${line} ${word}` : word;
-    if (ctx.measureText(next).width <= maxWidth || !line) {
-      line = next;
-    } else {
-      lines.push(line);
-      line = word;
-      if (lines.length >= maxLines - 1) break;
-    }
-  }
-  if (line && lines.length < maxLines) lines.push(line);
-  lines.forEach((item, index) => ctx.fillText(item, x, y + index * lineHeight));
-}
-
-function buildChartCanvas(root) {
-  const rows = extractChartRows(root);
-  const canvas = document.createElement('canvas');
-  canvas.width = 1200;
-  canvas.height = 650;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Браузер не поддерживает создание изображения');
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '700 30px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText('Структура судебных дел', 48, 52);
-
-  const period = document.querySelector('[data-reports-quarter] option:checked')?.textContent?.trim();
-  const year = document.querySelector('[data-reports-year]')?.value;
-  if (period || year) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '16px Arial';
-    ctx.fillText([period, year].filter(Boolean).join(' '), 48, 80);
-  }
-
-  if (!rows.length) {
-    ctx.fillStyle = '#475569';
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('Нет данных по структуре дел за выбранный период', canvas.width / 2, canvas.height / 2);
-    return canvas;
-  }
-
+function buildChartHtml(rows) {
+  if (!rows.length) return '<p style="text-align:center;color:#475569;padding:40px 0">Нет данных по структуре дел за выбранный период</p>';
   const max = Math.max(...rows.map(row => row.value), 1);
-  const chartLeft = 64;
-  const chartRight = canvas.width - 48;
-  const chartTop = 120;
-  const chartBottom = 510;
-  const availableWidth = chartRight - chartLeft;
-  const gap = Math.max(12, Math.min(28, availableWidth / Math.max(rows.length * 6, 1)));
-  const barWidth = Math.max(36, Math.min(110, (availableWidth - gap * (rows.length - 1)) / rows.length));
-  const usedWidth = rows.length * barWidth + (rows.length - 1) * gap;
-  const startX = chartLeft + Math.max(0, (availableWidth - usedWidth) / 2);
-
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(chartLeft, chartBottom + 0.5);
-  ctx.lineTo(chartRight, chartBottom + 0.5);
-  ctx.stroke();
-
-  rows.forEach((row, index) => {
-    const x = startX + index * (barWidth + gap);
-    const height = Math.max(10, Math.round((row.value / max) * (chartBottom - chartTop)));
-    const y = chartBottom - height;
-
-    ctx.fillStyle = row.color;
-    ctx.fillRect(x, y, barWidth, height);
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '700 16px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(row.valueText, x + barWidth / 2, y - 10);
-
-    ctx.fillStyle = '#334155';
-    ctx.font = '14px Arial';
-    wrapText(ctx, row.label, x + barWidth / 2, chartBottom + 24, barWidth + gap - 4, 17, 4);
-  });
-
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
-  ctx.fillStyle = '#475569';
-  ctx.font = '16px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Всего: ${total}`, 48, 620);
-  return canvas;
+  return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:18px 0 26px"><tr>${rows.map(row => {
+    const height = Math.max(18, Math.round(row.value / max * 220));
+    return `<td style="vertical-align:bottom;text-align:center;padding:0 8px;border:0">
+      <div style="font-weight:700;margin-bottom:8px">${escapeHtml(row.valueText)}</div>
+      <div style="height:${height}px;background:${escapeHtml(row.color)};width:46px;margin:0 auto"></div>
+      <div style="margin-top:8px;font-size:10pt;line-height:1.2">${escapeHtml(row.category)}</div>
+    </td>`;
+  }).join('')}</tr></table>`;
 }
 
-function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Не удалось сформировать PNG')), 'image/png');
-  });
+function buildWordHtml(root) {
+  const period = getPeriod(root);
+  const tableRows = getVisibleTableRows(root);
+  const chartRows = getVisibleChartRows(root);
+  const total = chartRows.reduce((sum, row) => sum + row.value, 0);
+
+  const bodyRows = tableRows.length
+    ? tableRows.map(row => `<tr>
+        <td>${escapeHtml(row.category)}</td>
+        <td>${escapeHtml(row.subject)}</td>
+        <td style="text-align:center">${escapeHtml(row.count)}</td>
+        <td style="text-align:center">${escapeHtml(row.share)}</td>
+        <td>${escapeHtml(row.period || period)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" style="text-align:center">Нет данных</td></tr>';
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name="ProgId" content="Word.Document">
+<meta name="Generator" content="Microsoft Word">
+<title>Структура судебных дел</title>
+<style>
+@page { size:A4; margin:1.5cm; }
+body { font-family:Arial,sans-serif; font-size:11pt; color:#111827; }
+h1 { font-size:16pt; margin:0 0 10pt; }
+p.period { margin:0 0 14pt; }
+table.data { width:100%; border-collapse:collapse; margin-top:16pt; }
+table.data th, table.data td { border:1px solid #9ca3af; padding:7pt; vertical-align:top; }
+table.data th { background:#eef2f7; font-weight:700; }
+</style>
+</head>
+<body>
+<h1>Структура судебных дел по категориям и предмету спора</h1>
+<p class="period">${escapeHtml(period)}</p>
+<h2 style="font-size:14pt">Структура судебных дел</h2>
+${buildChartHtml(chartRows)}
+<p>Всего: ${escapeHtml(total)}</p>
+<table class="data">
+<thead><tr><th>Категория</th><th>Предмет спора</th><th>Количество</th><th>Доля</th><th>Период</th></tr></thead>
+<tbody>${bodyRows}</tbody>
+</table>
+</body></html>`;
 }
 
-function downloadPng(blob) {
+function downloadWord(html, period) {
+  const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `diagramma-otcheta-${new Date().toISOString().slice(0, 10)}.png`;
+  link.download = `struktura-sudebnyh-del-${String(period || 'otchet').replace(/[^a-zа-я0-9]+/gi, '-').replace(/^-|-$/g, '')}.doc`;
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-async function copyChart(root, button) {
+async function exportWord(root, button) {
   const originalText = button.textContent;
   button.disabled = true;
-  button.textContent = 'Копирование…';
+  button.textContent = 'Формирование…';
   try {
-    const canvas = buildChartCanvas(root);
-    const blob = await canvasToBlob(canvas);
-    if (navigator.clipboard?.write && window.ClipboardItem) {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      setReportStatus('Диаграмма скопирована в буфер обмена');
-      button.textContent = 'Скопировано';
-    } else {
-      downloadPng(blob);
-      setReportStatus('Копирование изображений не поддерживается браузером — диаграмма сохранена как PNG');
-      button.textContent = 'PNG сохранён';
-    }
+    const rows = getVisibleTableRows(root);
+    const chartRows = getVisibleChartRows(root);
+    if (!rows.length && !chartRows.length) throw new Error('На экране нет данных для выгрузки');
+    const period = getPeriod(root);
+    downloadWord(buildWordHtml(root), period);
+    setReportStatus('Word-документ сформирован из данных, показанных на экране');
+    button.textContent = 'Word создан';
   } catch (error) {
-    try {
-      const canvas = buildChartCanvas(root);
-      const blob = await canvasToBlob(canvas);
-      downloadPng(blob);
-      setReportStatus('Браузер запретил доступ к буферу обмена — диаграмма сохранена как PNG');
-      button.textContent = 'PNG сохранён';
-    } catch (fallbackError) {
-      setReportStatus(`Не удалось скопировать диаграмму: ${fallbackError?.message || error?.message || 'неизвестная ошибка'}`, true);
-      button.textContent = 'Ошибка';
-    }
+    setReportStatus(`Не удалось создать Word: ${error?.message || 'неизвестная ошибка'}`, true);
+    button.textContent = 'Ошибка';
   } finally {
     setTimeout(() => {
       button.disabled = false;
@@ -179,6 +157,6 @@ export function initReportChartClipboard() {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    void copyChart(root, button);
+    void exportWord(root, button);
   }, true);
 }
