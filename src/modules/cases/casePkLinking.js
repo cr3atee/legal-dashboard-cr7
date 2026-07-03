@@ -4,7 +4,7 @@ let initialized = false;
 let syncing = false;
 let controlledRowsCache = [];
 
-const STANDALONE_PK_PLACEHOLDER = 'Без № ПК';
+const INTERNAL_STANDALONE_PK = '№0';
 
 function normalizePk(value) {
   return String(value || '')
@@ -81,13 +81,20 @@ async function resolveGeneralCaseId(data = {}) {
   const explicit = Number(data.general_case_id || data.generalCaseId || 0);
   if (explicit) return explicit;
   const pk = data.case_no || data.pk_number || data.case_number || data.control_case_number || '';
-  if (!normalizePk(pk) || pk === STANDALONE_PK_PLACEHOLDER) return null;
+  if (!normalizePk(pk) || pk === INTERNAL_STANDALONE_PK) return null;
   const rows = await getGeneralRows();
   return Number(findGeneralByPk(rows, pk)?.id || 0) || null;
 }
 
 function getFieldContainer(field) {
   return field?.closest('label, .form-field, .field, .controlled-form-field') || field?.parentElement || null;
+}
+
+function getControlledFormState(form) {
+  const id = Number(form?.elements?.id?.value || 0);
+  const row = findById(controlledRowsCache, id);
+  const linked = Boolean(Number(row?.general_case_id || 0));
+  return { id, row, linked, standalone: !linked };
 }
 
 function lockGeneralPkField() {
@@ -109,19 +116,17 @@ function configureControlledPkField() {
   const field = form?.querySelector('input[name="case_number"], input[name="case_no"], input[name="pk_number"]');
   if (!(form instanceof HTMLFormElement) || !(field instanceof HTMLInputElement)) return;
 
-  const id = Number(form.elements?.id?.value || 0);
-  const row = findById(controlledRowsCache, id);
-  const linked = Boolean(Number(row?.general_case_id || 0));
+  const { linked } = getControlledFormState(form);
   const container = getFieldContainer(field);
 
-  if (!id || !linked) {
+  if (!linked) {
     if (container) {
       container.hidden = true;
       container.setAttribute('aria-hidden', 'true');
       container.dataset.standaloneControlledPk = '1';
       container.style.setProperty('display', 'none', 'important');
     }
-    field.value = STANDALONE_PK_PLACEHOLDER;
+    field.value = INTERNAL_STANDALONE_PK;
     field.readOnly = true;
     field.tabIndex = -1;
     field.classList.remove('is-pk-locked');
@@ -143,6 +148,14 @@ function configureControlledPkField() {
   field.title = '№ ПК связан с карточкой общего перечня и не может быть изменён';
   field.dataset.lockedPk = field.value;
   delete field.dataset.externalControlled;
+}
+
+function prepareStandaloneControlledSubmit(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  const { standalone } = getControlledFormState(form);
+  if (!standalone) return;
+  const field = form.querySelector('input[name="case_number"], input[name="case_no"], input[name="pk_number"]');
+  if (field instanceof HTMLInputElement) field.value = INTERNAL_STANDALONE_PK;
 }
 
 function decorateStandaloneControlledCards() {
@@ -209,7 +222,8 @@ export function initCasePkLinking() {
     const standalone = !Number(data.general_case_id || 0);
     return originals.createControlledCase({
       ...data,
-      case_number: standalone ? '' : data.case_number
+      case_number: standalone ? '' : data.case_number,
+      general_case_id: standalone ? null : data.general_case_id
     });
   };
 
@@ -261,6 +275,11 @@ export function initCasePkLinking() {
     ...data,
     general_case_id: await resolveGeneralCaseId(data)
   });
+
+  document.addEventListener('submit', event => {
+    const form = event.target.closest?.('[data-controlled-form]');
+    if (form) prepareStandaloneControlledSubmit(form);
+  }, true);
 
   document.addEventListener('click', event => {
     if (event.target.closest?.('[data-general-new], [data-general-open], [data-controlled-new], [data-controlled-open], [data-controlled-row], [data-controlled-card], [data-controlled-clear]')) {
