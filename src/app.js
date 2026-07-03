@@ -16,6 +16,7 @@ import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js'
 import { initGeneralCaseCancellationUi } from './modules/cases/generalCaseCancellationUi.js';
 import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseExecutorSuggestions.js';
 import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
+import { initLinkedCaseMultiSourceSync } from './modules/cases/linkedCaseMultiSourceSync.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -70,6 +71,7 @@ export function initApp() {
     initControlledCasesPage();
     initControlledHistorySync();
     initControlledHistoryCalendarFix();
+    initLinkedCaseMultiSourceSync();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
