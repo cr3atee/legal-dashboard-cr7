@@ -4,10 +4,18 @@ import { showNotification } from '../../layout/notifications.js';
 let initialized = false;
 let checking = false;
 let activeForm = null;
+let cachedRows = [];
+let cacheReady = false;
 
 export function initSimilarGeneralCaseWarning() {
   if (initialized) return;
   initialized = true;
+
+  window.addEventListener('general-cases:updated', event => {
+    if (!Array.isArray(event.detail)) return;
+    cachedRows = event.detail;
+    cacheReady = true;
+  });
 
   document.addEventListener('submit', event => {
     const form = event.target.closest?.('[data-general-form]');
@@ -23,13 +31,17 @@ export function initSimilarGeneralCaseWarning() {
       return;
     }
 
-    checkBeforeCreate(form).catch(error => {
-      console.error('Не удалось проверить похожие дела:', error);
-      showNotification(`Не удалось проверить похожие дела: ${error.message}`, 'error');
-    });
+    void checkBeforeCreate(form);
   }, true);
 
   document.addEventListener('click', event => {
+    if (event.target.closest?.('[data-general-new]')) {
+      activeForm = null;
+      checking = false;
+      closeWarning();
+      return;
+    }
+
     const openButton = event.target.closest?.('[data-similar-case-open]');
     if (openButton) {
       event.preventDefault();
@@ -68,23 +80,45 @@ async function checkBeforeCreate(form) {
   activeForm = form;
   setFormChecking(form, true);
 
-  try {
-    const rows = await dbApi.getGeneralCases();
-    const items = (Array.isArray(rows) ? rows : [])
-      .filter(row => isSimilarCase(criteria, row))
-      .slice(0, 10);
+  let items = [];
+  let checkFailed = false;
 
-    if (!items.length) {
-      activeForm = null;
-      submitWithBypass(form);
-      return;
+  try {
+    const rows = cacheReady
+      ? cachedRows
+      : await withTimeout(dbApi.getGeneralCases(), 6000, 'Проверка похожих дел заняла слишком много времени');
+
+    if (!cacheReady && Array.isArray(rows)) {
+      cachedRows = rows;
+      cacheReady = true;
     }
 
-    openWarning(items);
+    items = (Array.isArray(rows) ? rows : [])
+      .filter(row => isSimilarCase(criteria, row))
+      .slice(0, 10);
+  } catch (error) {
+    checkFailed = true;
+    console.warn('Не удалось проверить похожие дела. Сохранение будет продолжено:', error);
   } finally {
     checking = false;
-    if (form.dataset.caseSubmitLocked !== '1') setFormChecking(form, false);
+    setFormChecking(form, false);
   }
+
+  if (!form.isConnected) {
+    activeForm = null;
+    return;
+  }
+
+  if (items.length) {
+    openWarning(items);
+    return;
+  }
+
+  activeForm = null;
+  if (checkFailed) {
+    showNotification('Проверка похожих дел временно недоступна. Дело будет сохранено.', 'info');
+  }
+  submitWithBypass(form);
 }
 
 function collectCriteria(form) {
@@ -129,7 +163,9 @@ function subjectMatches(inputValue, storedValue) {
   const input = normalizeText(inputValue);
   const stored = normalizeText(storedValue);
   if (!input || !stored) return false;
-  return input === stored || input.startsWith(`${stored} `);
+  return input === stored
+    || input.startsWith(`${stored} `)
+    || stored.startsWith(`${input} `);
 }
 
 function openWarning(items) {
@@ -214,16 +250,27 @@ function continueCreatingCase() {
 }
 
 function submitWithBypass(form) {
+  if (!(form instanceof HTMLFormElement) || !form.isConnected) return;
+
+  checking = false;
+  setFormChecking(form, false);
   form.dataset.similarCheckBypass = '1';
-  try {
-    form.requestSubmit();
-  } finally {
-    window.setTimeout(() => delete form.dataset.similarCheckBypass, 0);
-  }
+
+  queueMicrotask(() => {
+    try {
+      form.requestSubmit();
+    } catch (error) {
+      console.error('Не удалось повторно отправить форму после проверки похожих дел:', error);
+      showNotification(`Не удалось продолжить сохранение: ${error.message}`, 'error');
+    } finally {
+      window.setTimeout(() => delete form.dataset.similarCheckBypass, 1000);
+    }
+  });
 }
 
 function setFormChecking(form, value) {
   form.querySelectorAll('button[type="submit"], [data-general-save]').forEach(button => {
+    if (form.dataset.caseSubmitLocked === '1' && !value) return;
     button.disabled = Boolean(value);
     button.setAttribute('aria-busy', value ? 'true' : 'false');
   });
@@ -248,6 +295,14 @@ function closeCurrentGeneralDialog() {
     dialog.removeAttribute('open');
     dialog.classList.remove('is-open');
   }
+}
+
+function withTimeout(promise, milliseconds, message) {
+  let timer = 0;
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
 }
 
 function escapeHtml(value) {
