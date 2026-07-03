@@ -6,6 +6,7 @@ import './styles/cancelled-general-cases.css';
 import './styles/attendance-badge-fix.css';
 import './styles/controlled-editor-overlay-fix.css';
 import './styles/controlled-history-sync.css';
+import './styles/similar-general-case-warning.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
@@ -18,6 +19,7 @@ import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseE
 import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
 import { initLinkedCaseMultiSourceSync } from './modules/cases/linkedCaseMultiSourceSync.js';
 import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayloadFix.js';
+import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCaseWarning.js';
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
@@ -76,6 +78,7 @@ export function initApp() {
     initControlledHistoryCalendarFix();
     initLinkedCaseMultiSourceSync();
     initLinkedSchedulePayloadFix();
+    initSimilarGeneralCaseWarning();
     initCaseCreationGuard();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
