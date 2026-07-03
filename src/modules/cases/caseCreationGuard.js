@@ -35,8 +35,8 @@ export function initCaseCreationGuard() {
     }, 700);
   }, true);
 
-  window.addEventListener('general-cases:updated', () => unlockForm(getForm('general')));
-  window.addEventListener('controlled-cases:updated', () => unlockForm(getForm('controlled')));
+  window.addEventListener('general-cases:updated', () => unlockCompletedForm(getForm('general')));
+  window.addEventListener('controlled-cases:updated', () => unlockCompletedForm(getForm('controlled')));
 
   document.addEventListener('click', event => {
     if (event.target.closest?.('[data-general-new], [data-controlled-new], [data-controlled-clear]')) {
@@ -72,6 +72,13 @@ function lockForm(form) {
 
   clearTimeout(unlockTimers.get(form));
   unlockTimers.set(form, window.setTimeout(() => unlockForm(form), 30000));
+}
+
+function unlockCompletedForm(form) {
+  if (!(form instanceof HTMLFormElement)) return;
+  if (form.dataset.caseSubmitLocked !== '1') return;
+  if (form.dataset.caseApiCompleted !== '1') return;
+  unlockForm(form);
 }
 
 function unlockForm(form) {
