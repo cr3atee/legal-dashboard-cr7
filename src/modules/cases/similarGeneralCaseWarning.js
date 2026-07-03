@@ -75,6 +75,7 @@ async function checkBeforeCreate(form) {
       .slice(0, 10);
 
     if (!items.length) {
+      activeForm = null;
       submitWithBypass(form);
       return;
     }
@@ -82,7 +83,7 @@ async function checkBeforeCreate(form) {
     openWarning(items);
   } finally {
     checking = false;
-    setFormChecking(form, false);
+    if (form.dataset.caseSubmitLocked !== '1') setFormChecking(form, false);
   }
 }
 
