@@ -25,6 +25,7 @@ import { initControlledHistorySync } from './modules/controlledCases/controlledH
 import { initControlledHistoryCalendarFix } from './modules/controlledCases/controlledHistoryCalendarFix.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
+import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
@@ -77,6 +78,7 @@ export function initApp() {
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
+    initControlledHistoryCalendarRouting();
     initCalendarTimeLabel();
     initCalendarMoveHistory();
     initSchedulePage();
