@@ -273,8 +273,23 @@ export function initCasePkLinking() {
       caseNo = displayPk(originalPk);
     }
 
-    const saved = await originals.updateGeneralCase(id, { ...data, case_no: caseNo });
+    const saved = await originals.updateGeneralCase(id, {
+      ...data,
+      case_no: caseNo,
+      skip_linked: true
+    });
+
+    if (linked && !syncing) {
+      syncing = true;
+      try {
+        await originals.updateControlledCase(linked.id, generalToControlled(saved, linked));
+      } finally {
+        syncing = false;
+      }
+    }
+
     await Promise.all([getGeneralRows(), getControlledRows()]);
+    dispatchCaseReloads();
     return saved;
   };
 
@@ -309,7 +324,7 @@ export function initCasePkLinking() {
 
   dbApi.updateControlledCase = async (id, data) => {
     const currentRows = await getControlledRows();
-    let current = findById(currentRows, id);
+    const current = findById(currentRows, id);
     let generalCaseId = Number(current?.general_case_id || data.general_case_id || 0);
 
     if (!generalCaseId) {
