@@ -10,7 +10,7 @@ export function initControlledHistoryCalendarRouting() {
 
   document.addEventListener('click', event => {
     const target = event.target.closest?.('[data-calendar-task-id], [data-calendar-week-task-id]');
-    if (!target) return;
+    if (!target || target.dataset.calendarRoutingBypass === '1') return;
 
     const id = Number(target.dataset.calendarTaskId || target.dataset.calendarWeekTaskId || 0);
     if (!id) return;
