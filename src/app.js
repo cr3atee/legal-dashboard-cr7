@@ -4,6 +4,7 @@ import './styles/executor-suggestions-fix.css';
 import './styles/calendar-move-history.css';
 import './styles/cancelled-general-cases.css';
 import './styles/attendance-badge-fix.css';
+import './styles/controlled-editor-overlay-fix.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
@@ -13,6 +14,7 @@ import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.j
 import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js';
 import { initGeneralCaseCancellationUi } from './modules/cases/generalCaseCancellationUi.js';
 import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseExecutorSuggestions.js';
+import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -61,6 +63,7 @@ export function initApp() {
     initGeneralCasesPage();
     initGeneralCaseCancellationUi();
     initGeneralCaseExecutorSuggestions();
+    initAttendanceBadgeFix();
     initControlledCasesPage();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
