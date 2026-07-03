@@ -20,6 +20,7 @@ import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestion
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initControlledHistorySync } from './modules/controlledCases/controlledHistorySync.js';
+import { initControlledHistoryCalendarFix } from './modules/controlledCases/controlledHistoryCalendarFix.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
@@ -68,6 +69,7 @@ export function initApp() {
     initAttendanceBadgeFix();
     initControlledCasesPage();
     initControlledHistorySync();
+    initControlledHistoryCalendarFix();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
