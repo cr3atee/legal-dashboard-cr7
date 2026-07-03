@@ -42,9 +42,12 @@ async function ensureGeneralCaseNumberSchema(dbPath) {
       last_number INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    await run(db, 'DROP INDEX IF EXISTS idx_general_cases_case_no_unique').catch(() => {});
     await run(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_general_cases_case_no_unique
       ON general_cases(case_no)
-      WHERE TRIM(COALESCE(case_no, '')) <> ''`).catch(() => {});
+      WHERE TRIM(COALESCE(case_no, '')) <> ''
+        AND LOWER(TRIM(COALESCE(case_no, ''))) <> LOWER('Без № ПК')`).catch(() => {});
   } finally {
     db.close();
   }
@@ -57,21 +60,33 @@ async function reserveNextGeneralCaseNumber(dbPath) {
     await run(db, 'BEGIN IMMEDIATE');
 
     const sequence = await get(db, 'SELECT last_number FROM general_case_number_sequences WHERE year=?', [year]);
-    let lastNumber = Number(sequence?.last_number || 0);
+    const active = await get(db, `
+      SELECT MAX(CAST(substr(clean_no, 1, instr(clean_no, '/') - 1) AS INTEGER)) AS max_no
+      FROM (
+        SELECT REPLACE(REPLACE(TRIM(COALESCE(case_no, '')), '№', ''), ' ', '') AS clean_no
+        FROM general_cases
+      )
+      WHERE clean_no GLOB '[0-9]*/${year}'
+    `);
+    const archived = await get(db, `
+      SELECT MAX(CAST(substr(clean_no, 1, instr(clean_no, '/') - 1) AS INTEGER)) AS max_no
+      FROM (
+        SELECT REPLACE(REPLACE(TRIM(COALESCE(case_no, '')), '№', ''), ' ', '') AS clean_no
+        FROM general_cases_archive
+      )
+      WHERE clean_no GLOB '[0-9]*/${year}'
+    `).catch(() => null);
+
+    const lastNumber = Math.max(
+      Number(sequence?.last_number || 0),
+      Number(active?.max_no || 0),
+      Number(archived?.max_no || 0)
+    );
 
     if (!sequence) {
-      const active = await get(db, `
-        SELECT MAX(CAST(substr(case_no, 1, instr(case_no, '/') - 1) AS INTEGER)) AS max_no
-        FROM general_cases
-        WHERE case_no GLOB '[0-9]*/${year}'
-      `);
-      const archived = await get(db, `
-        SELECT MAX(CAST(substr(case_no, 1, instr(case_no, '/') - 1) AS INTEGER)) AS max_no
-        FROM general_cases_archive
-        WHERE case_no GLOB '[0-9]*/${year}'
-      `).catch(() => null);
-      lastNumber = Math.max(Number(active?.max_no || 0), Number(archived?.max_no || 0));
       await run(db, 'INSERT INTO general_case_number_sequences (year, last_number, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [year, lastNumber]);
+    } else if (Number(sequence.last_number || 0) !== lastNumber) {
+      await run(db, 'UPDATE general_case_number_sequences SET last_number=?, updated_at=CURRENT_TIMESTAMP WHERE year=?', [lastNumber, year]);
     }
 
     const nextNumber = lastNumber + 1;
