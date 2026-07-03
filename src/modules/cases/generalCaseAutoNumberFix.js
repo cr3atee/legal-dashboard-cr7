@@ -12,7 +12,7 @@ export function initGeneralCaseAutoNumberFix() {
 
   dbApi.createGeneralCase = async data => {
     const currentNumber = String(data?.case_no || data?.pk_number || data?.case_number || '').trim();
-    if (currentNumber || isExternalCaseNumber(currentNumber)) {
+    if (currentNumber && !isAutoNumberPlaceholder(currentNumber)) {
       return createGeneralCase(data);
     }
 
@@ -21,7 +21,8 @@ export function initGeneralCaseAutoNumberFix() {
     if (!caseNumber) throw new Error('Не удалось автоматически присвоить № ПК');
 
     const form = document.querySelector('[data-general-form]');
-    if (form?.elements?.case_no) form.elements.case_no.value = caseNumber;
+    const field = findNumberField(form);
+    if (field) field.value = caseNumber;
 
     return createGeneralCase({
       ...data,
@@ -33,7 +34,23 @@ export function initGeneralCaseAutoNumberFix() {
     if (event.target.closest?.('[data-general-new]')) {
       window.setTimeout(configureNewCaseNumberField, 0);
       window.setTimeout(configureNewCaseNumberField, 100);
+      window.setTimeout(configureNewCaseNumberField, 260);
+      return;
     }
+
+    const submit = event.target.closest?.('[data-general-form] button[type="submit"], [data-general-save]');
+    if (submit) configureNewCaseNumberField();
+  }, true);
+
+  document.addEventListener('invalid', event => {
+    const form = event.target.closest?.('[data-general-form]');
+    const field = findNumberField(form);
+    if (!form || event.target !== field) return;
+    if (String(form.elements?.id?.value || '').trim()) return;
+
+    event.preventDefault();
+    configureNewCaseNumberField();
+    window.setTimeout(() => form.requestSubmit(), 0);
   }, true);
 
   window.addEventListener('general-cases:updated', configureNewCaseNumberField);
@@ -80,14 +97,18 @@ function authorizationHeader() {
 
 function configureNewCaseNumberField() {
   const form = document.querySelector('[data-general-form]');
-  const field = form?.querySelector('input[name="case_no"], input[name="pk_number"], input[name="case_number"]');
+  const field = findNumberField(form);
   if (!(form instanceof HTMLFormElement) || !(field instanceof HTMLInputElement)) return;
+
+  rememberOriginalValidation(field);
 
   const editing = Boolean(String(form.elements?.id?.value || '').trim());
   field.readOnly = true;
   field.setAttribute('aria-readonly', 'true');
 
   if (editing) {
+    field.disabled = false;
+    restoreRequired(field);
     field.classList.add('is-pk-locked');
     field.placeholder = '';
     field.title = '№ ПК нельзя изменить после создания дела';
@@ -95,9 +116,34 @@ function configureNewCaseNumberField() {
   }
 
   field.value = '';
+  field.disabled = true;
+  field.required = false;
+  field.removeAttribute('required');
+  field.setCustomValidity('');
   field.classList.remove('is-pk-locked');
   field.placeholder = 'Присваивается автоматически при сохранении';
   field.title = '№ ПК будет присвоен автоматически после нажатия «Сохранить»';
+}
+
+function findNumberField(form) {
+  return form?.querySelector?.('input[name="case_no"], input[name="pk_number"], input[name="case_number"]') || null;
+}
+
+function rememberOriginalValidation(field) {
+  if (field.dataset.autoNumberOriginalRequired == null) {
+    field.dataset.autoNumberOriginalRequired = field.required || field.hasAttribute('required') ? '1' : '0';
+  }
+}
+
+function restoreRequired(field) {
+  const required = field.dataset.autoNumberOriginalRequired === '1';
+  field.required = required;
+  if (required) field.setAttribute('required', '');
+  else field.removeAttribute('required');
+}
+
+function isAutoNumberPlaceholder(value) {
+  return !String(value || '').trim();
 }
 
 function isExternalCaseNumber(value) {
