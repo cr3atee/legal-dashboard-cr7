@@ -6,6 +6,7 @@ const { handleCalendarUsers } = require('./calendarUsersRoute.cjs');
 const { ensureGeneralCaseNumberSchema, handleGeneralCaseNumber } = require('./generalCaseNumberRoute.cjs');
 const { ensureGeneralCaseCancellationSchema, handleGeneralCaseCancellation } = require('./generalCaseCancellationRoute.cjs');
 const { handleLinkedCaseLifecycle } = require('./linkedCaseLifecycleRoute.cjs');
+const { ensureCaseCreationUniqueness } = require('./caseCreationUniqueness.cjs');
 
 async function ensureSchema(dbPath) {
   await core.ensureSchema(dbPath);
@@ -13,6 +14,7 @@ async function ensureSchema(dbPath) {
   await ensureReportMetricsSchema(dbPath);
   await ensureGeneralCaseNumberSchema(dbPath);
   await ensureGeneralCaseCancellationSchema(dbPath);
+  await ensureCaseCreationUniqueness(dbPath);
 }
 
 async function handleApiRequest(req, res, url, dbPath) {
