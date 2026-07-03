@@ -4,7 +4,7 @@ let initialized = false;
 let syncing = false;
 let controlledRowsCache = [];
 
-const EXTERNAL_PK_PREFIX = '__EXTERNAL_CONTROL__';
+const STANDALONE_PK_PLACEHOLDER = 'Без № ПК';
 
 function normalizePk(value) {
   return String(value || '')
@@ -18,14 +18,6 @@ function displayPk(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   return raw.startsWith('№') ? raw : `№${raw}`;
-}
-
-function isTechnicalExternalPk(value) {
-  return String(value || '').toUpperCase().includes(EXTERNAL_PK_PREFIX);
-}
-
-function makeTechnicalExternalPk() {
-  return `${EXTERNAL_PK_PREFIX}${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function pkFromGeneral(row = {}) {
@@ -89,7 +81,7 @@ async function resolveGeneralCaseId(data = {}) {
   const explicit = Number(data.general_case_id || data.generalCaseId || 0);
   if (explicit) return explicit;
   const pk = data.case_no || data.pk_number || data.case_number || data.control_case_number || '';
-  if (!normalizePk(pk) || isTechnicalExternalPk(pk)) return null;
+  if (!normalizePk(pk) || pk === STANDALONE_PK_PLACEHOLDER) return null;
   const rows = await getGeneralRows();
   return Number(findGeneralByPk(rows, pk)?.id || 0) || null;
 }
@@ -123,17 +115,29 @@ function configureControlledPkField() {
   const container = getFieldContainer(field);
 
   if (!id || !linked) {
-    container?.setAttribute('hidden', '');
-    field.readOnly = false;
+    if (container) {
+      container.hidden = true;
+      container.setAttribute('aria-hidden', 'true');
+      container.dataset.standaloneControlledPk = '1';
+      container.style.setProperty('display', 'none', 'important');
+    }
+    field.value = STANDALONE_PK_PLACEHOLDER;
+    field.readOnly = true;
+    field.tabIndex = -1;
     field.classList.remove('is-pk-locked');
     field.removeAttribute('title');
-    if (!isTechnicalExternalPk(field.value)) field.value = makeTechnicalExternalPk();
     field.dataset.externalControlled = '1';
     delete field.dataset.lockedPk;
     return;
   }
 
-  container?.removeAttribute('hidden');
+  if (container) {
+    container.hidden = false;
+    container.removeAttribute('aria-hidden');
+    delete container.dataset.standaloneControlledPk;
+    container.style.removeProperty('display');
+  }
+  field.tabIndex = 0;
   field.readOnly = true;
   field.classList.add('is-pk-locked');
   field.title = '№ ПК связан с карточкой общего перечня и не может быть изменён';
@@ -149,7 +153,7 @@ function decorateStandaloneControlledCards() {
     const kicker = card.querySelector('.controlled-case-kicker');
     const title = card.querySelector('.controlled-case-card-head h4');
     if (kicker) kicker.textContent = 'Контрольное дело другого комитета';
-    if (title && (!row.case_number || isTechnicalExternalPk(row.case_number))) {
+    if (title && !row.case_number) {
       title.textContent = row.court_case_number || row.subject || 'Без № ПК';
     }
   });
@@ -166,6 +170,9 @@ function scheduleUiSync() {
     configureControlledPkField();
     decorateStandaloneControlledCards();
   }, 80);
+  setTimeout(() => {
+    configureControlledPkField();
+  }, 220);
 }
 
 const originals = {};
@@ -200,11 +207,10 @@ export function initCasePkLinking() {
 
   dbApi.createControlledCase = async data => {
     const standalone = !Number(data.general_case_id || 0);
-    const payload = {
+    return originals.createControlledCase({
       ...data,
-      case_number: standalone && isTechnicalExternalPk(data.case_number) ? '' : data.case_number
-    };
-    return originals.createControlledCase(payload);
+      case_number: standalone ? '' : data.case_number
+    });
   };
 
   dbApi.updateControlledCase = async (id, data) => {
@@ -215,7 +221,7 @@ export function initCasePkLinking() {
 
     const saved = await originals.updateControlledCase(id, {
       ...data,
-      case_number: standalone && isTechnicalExternalPk(data.case_number) ? '' : data.case_number,
+      case_number: standalone ? '' : data.case_number,
       general_case_id: generalCaseId || null
     });
 
@@ -257,7 +263,7 @@ export function initCasePkLinking() {
   });
 
   document.addEventListener('click', event => {
-    if (event.target.closest?.('[data-general-new], [data-general-open], [data-controlled-new], [data-controlled-open], [data-controlled-row], [data-controlled-card]')) {
+    if (event.target.closest?.('[data-general-new], [data-general-open], [data-controlled-new], [data-controlled-open], [data-controlled-row], [data-controlled-card], [data-controlled-clear]')) {
       scheduleUiSync();
     }
   }, true);
