@@ -12,3 +12,42 @@ body.controlled-editor-sheet-open .topbar-modern {
 body.controlled-editor-sheet-open .topbar * {
   pointer-events: none !important;
 }
+
+body.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open {
+  position: fixed !important;
+  z-index: 5000 !important;
+  top: 50% !important;
+  right: 18px !important;
+  bottom: auto !important;
+  left: 318px !important;
+  width: auto !important;
+  max-width: none !important;
+  max-height: calc(100vh - 32px) !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  transform: translateY(-50%) !important;
+}
+
+body.sidebar-collapsed.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open {
+  left: 118px !important;
+}
+
+@media (max-width: 1024px) {
+  body.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open,
+  body.sidebar-collapsed.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open {
+    right: 12px !important;
+    left: 104px !important;
+    max-height: calc(100vh - 24px) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open,
+  body.sidebar-collapsed.controlled-editor-sheet-open #controlledCases .controlled-editor-card.is-open {
+    right: 8px !important;
+    left: 84px !important;
+    max-height: calc(100vh - 16px) !important;
+    border-radius: 20px !important;
+  }
+}
