@@ -1,0 +1,14 @@
+body.controlled-editor-sheet-open {
+  overflow: hidden !important;
+}
+
+body.controlled-editor-sheet-open .topbar,
+body.controlled-editor-sheet-open .topbar-modern {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.controlled-editor-sheet-open .topbar * {
+  pointer-events: none !important;
+}
