@@ -7,7 +7,6 @@ const { ensureGeneralCaseNumberSchema, handleGeneralCaseNumber } = require('./ge
 const { ensureGeneralCaseCancellationSchema, handleGeneralCaseCancellation } = require('./generalCaseCancellationRoute.cjs');
 const { handleLinkedCaseLifecycle } = require('./linkedCaseLifecycleRoute.cjs');
 const { ensureCaseCreationUniqueness } = require('./caseCreationUniqueness.cjs');
-const { handleSimilarGeneralCases } = require('./similarGeneralCasesRoute.cjs');
 
 async function ensureSchema(dbPath) {
   await core.ensureSchema(dbPath);
@@ -20,7 +19,6 @@ async function ensureSchema(dbPath) {
 
 async function handleApiRequest(req, res, url, dbPath) {
   if (await handleGeneralCaseNumber(req, res, url, dbPath)) return true;
-  if (await handleSimilarGeneralCases(req, res, url, dbPath)) return true;
   if (await handleGeneralCaseCancellation(req, res, url, dbPath)) return true;
   if (await handleLinkedCaseLifecycle(req, res, url, dbPath)) return true;
   if (await handleCalendarUsers(req, res, url, dbPath)) return true;
