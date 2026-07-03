@@ -1,5 +1,4 @@
 import { dbApi } from '../../api/dbApi.js';
-import { getCurrentUserName } from '../../auth/session.js';
 import { showNotification } from '../../layout/notifications.js';
 
 let initialized = false;
@@ -19,18 +18,17 @@ export function initControlledHistoryCalendarRouting() {
     event.stopImmediatePropagation();
     openLinkedCalendarSource(id).catch(error => {
       console.warn('Не удалось открыть источник события календаря:', error);
-      showNotification('Не удалось открыть связанную карточку', 'error');
+      redispatchOrdinaryCalendarClick(id);
     });
   }, true);
 }
 
 async function openLinkedCalendarSource(id) {
-  const user = getCurrentUserName();
-  const rows = await dbApi.getCalendarTasks({ user }).catch(() => []);
+  const rows = await dbApi.getCalendarTasks().catch(() => []);
   const task = rows.find(row => Number(row.id || 0) === Number(id));
 
   if (!task) {
-    showNotification('Событие календаря не найдено', 'error');
+    redispatchOrdinaryCalendarClick(id);
     return;
   }
 
