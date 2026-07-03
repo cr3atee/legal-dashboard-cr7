@@ -18,6 +18,7 @@ import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseE
 import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
 import { initLinkedCaseMultiSourceSync } from './modules/cases/linkedCaseMultiSourceSync.js';
 import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayloadFix.js';
+import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -75,6 +76,7 @@ export function initApp() {
     initControlledHistoryCalendarFix();
     initLinkedCaseMultiSourceSync();
     initLinkedSchedulePayloadFix();
+    initCaseCreationGuard();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
