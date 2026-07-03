@@ -21,6 +21,7 @@ import { initLinkedCaseMultiSourceSync } from './modules/cases/linkedCaseMultiSo
 import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayloadFix.js';
 import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCaseWarning.js';
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
+import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNumberFix.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -106,6 +107,7 @@ export function initApp() {
     initLatestUserRequirements();
     initRoleUiPolicy();
     initCaseNumberAutoYear();
+    initGeneralCaseAutoNumberFix();
   });
 }
 
