@@ -182,9 +182,10 @@
               </div>
             </fieldset>
 
-            <div class="calendar-form-grid">
-              <label data-calendar-field="date"><span>Дата</span><input name="date" type="date" required></label>
-              <label data-calendar-field="time"><span>Время начала</span><input name="time" data-calendar-time maxlength="5" autocomplete="off"></label>
+            <div class="calendar-form-grid calendar-main-time-row">
+              <label class="calendar-executor-field" data-calendar-field="executor"><span>Исполнитель</span><select name="executor" data-calendar-task-owner><option value="">Не выбран</option></select></label>
+              <label class="calendar-date-field" data-calendar-field="date"><span>Дата</span><input name="date" type="date" required></label>
+              <label class="calendar-time-field" data-calendar-field="time"><span>Время</span><input name="time" data-calendar-time maxlength="5" placeholder="ЧЧ:ММ" autocomplete="off"></label>
             </div>
 
             <label class="calendar-full-field" data-calendar-field="desc"><span>Название события</span><input name="desc" autocomplete="off"></label>
@@ -233,45 +234,32 @@
           <div class="calendar-form-error" data-calendar-case-link-error hidden></div>
           <div class="calendar-case-link-results" data-calendar-case-link-results></div>
         </div>
-        <div class="calendar-dialog-actions">
-          <button class="btn" data-calendar-case-link-close type="button">Закрыть</button>
-          <button class="btn primary" data-calendar-case-link-search type="button">Найти</button>
-        </div>
+        <div class="calendar-dialog-actions"><button class="btn" data-calendar-case-link-close type="button">Закрыть</button><button class="btn primary" data-calendar-case-link-search type="button">Найти</button></div>
       </dialog>
 
       <dialog class="calendar-case-question-dialog" data-calendar-case-question-dialog>
-        <div class="calendar-dialog-head">
-          <div><h3>Связать дело с общим перечнем?</h3><p>Можно заполнить суд и предмет из выбранной карточки.</p></div>
-          <button class="icon-button" data-calendar-case-question-no type="button">&times;</button>
-        </div>
-        <div class="calendar-dialog-actions">
-          <button class="btn" data-calendar-case-question-no type="button">Нет</button>
-          <button class="btn primary" data-calendar-case-question-yes type="button">Да</button>
-        </div>
+        <div class="calendar-dialog-head compact"><div><h3>Связать с делом?</h3><p>Для этого типа записи можно выбрать дело из общего перечня.</p></div></div>
+        <div class="calendar-dialog-actions"><button class="btn" data-calendar-case-question-no type="button">Нет</button><button class="btn primary" data-calendar-case-question-yes type="button">Да</button></div>
       </dialog>
 
       <dialog class="calendar-confirm-dialog" data-calendar-confirm-dialog>
-        <div class="calendar-dialog-head">
-          <div><h3 data-calendar-confirm-title>Подтверждение</h3><p data-calendar-confirm-message></p></div>
-          <button class="icon-button" data-calendar-confirm-cancel type="button">&times;</button>
-        </div>
-        <div class="calendar-dialog-actions">
-          <button class="btn" data-calendar-confirm-cancel type="button">Отмена</button>
-          <button class="btn danger" data-calendar-confirm-ok type="button">Удалить</button>
-        </div>
+        <div class="calendar-dialog-head compact"><div><h3 data-calendar-confirm-title>Подтверждение</h3><p data-calendar-confirm-message></p></div></div>
+        <div class="calendar-dialog-actions"><button class="btn" data-calendar-confirm-cancel type="button">Отмена</button><button class="btn primary" data-calendar-confirm-ok type="button">OK</button></div>
       </dialog>
 
       <dialog class="calendar-detail-dialog" data-calendar-detail-dialog>
-        <div class="calendar-dialog-head">
-          <div><h3>Просмотр дела</h3><p data-calendar-detail-date></p></div>
+        <div class="calendar-dialog-head compact">
+          <div><h3>Просмотр события</h3><p data-calendar-detail-date></p></div>
           <button class="icon-button" data-calendar-detail-close type="button">×</button>
         </div>
         <div class="calendar-detail-body" data-calendar-detail-body></div>
-        <div class="calendar-dialog-actions">
-          <button class="btn danger" data-calendar-detail-delete type="button">Удалить</button>
-          <button class="btn" data-calendar-detail-more type="button" hidden>Подробнее</button>
-          <button class="btn" data-calendar-detail-close type="button">Закрыть</button>
-        </div>
+        <div class="calendar-dialog-actions"><button class="btn" data-calendar-detail-more type="button" hidden>Подробнее</button><button class="btn danger" data-calendar-detail-delete type="button" hidden>Удалить</button><button class="btn primary" data-calendar-detail-close type="button">Закрыть</button></div>
+      </dialog>
+
+      <dialog class="calendar-plan-dialog" data-calendar-plan-dialog>
+        <div class="calendar-dialog-head"><div><h3>План на неделю</h3><p>Выберите дату начала недели</p></div><button class="icon-button" data-calendar-plan-close type="button">×</button></div>
+        <div class="calendar-dialog-body"><input data-calendar-plan-date type="date"><p class="calendar-plan-range" data-calendar-plan-range></p></div>
+        <div class="calendar-dialog-actions"><button class="btn" data-calendar-plan-close type="button">Отмена</button><button class="btn primary" data-calendar-plan-export type="button">Сформировать</button></div>
       </dialog>
     </section>
   `;
