@@ -22,6 +22,7 @@ import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayl
 import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCaseWarning.js';
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNumberFix.js';
+import { initLinkedCaseDeletionSync } from './modules/cases/linkedCaseDeletionSync.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -82,6 +83,7 @@ export function initApp() {
     initLinkedSchedulePayloadFix();
     initSimilarGeneralCaseWarning();
     initCaseCreationGuard();
+    initLinkedCaseDeletionSync();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
