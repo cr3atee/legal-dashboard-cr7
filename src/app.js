@@ -34,6 +34,7 @@ import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelecte
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
+import { initScheduleDateLabelFix } from './modules/schedule/scheduleDateLabelFix.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
 import { initMeetingsPage } from './modules/meetings/meetingsController.js';
@@ -88,6 +89,7 @@ export function initApp() {
     initCalendarTimeLabel();
     initCalendarMoveHistory();
     initSchedulePage();
+    initScheduleDateLabelFix();
     initEmergencyFundPage();
     initMunicipalRegistryPage();
     initMeetingsPage();
