@@ -129,7 +129,7 @@ export function renderSchedulePage() {
               </label>
 
               <label data-schedule-hearing-date-wrap>
-                <span>Дата СЗ</span>
+                <span>Дата судебного заседания</span>
                 <div class="schedule-date-input-row">
                   <input name="hearing_date" data-schedule-date maxlength="10" placeholder="ДД.ММ.ГГГГ">
                   <button class="btn small" data-schedule-hearing-today type="button">Сегодня</button>
