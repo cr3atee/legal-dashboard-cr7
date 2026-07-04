@@ -6,6 +6,7 @@ import './styles/cancelled-general-cases.css';
 import './styles/attendance-badge-fix.css';
 import './styles/controlled-editor-overlay-fix.css';
 import './styles/controlled-history-sync.css';
+import './styles/controlled-history-compact-date.css';
 import './styles/similar-general-case-warning.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
@@ -28,6 +29,7 @@ import { initGeneralCasesPage } from './modules/cases/generalCasesController.js'
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initControlledHistorySync } from './modules/controlledCases/controlledHistorySync.js';
 import { initControlledHistoryCalendarFix } from './modules/controlledCases/controlledHistoryCalendarFix.js';
+import { initControlledHistoryCompactDateUi } from './modules/controlledCases/controlledHistoryCompactDateUi.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
@@ -79,6 +81,7 @@ export function initApp() {
     initControlledCasesPage();
     initControlledHistorySync();
     initControlledHistoryCalendarFix();
+    initControlledHistoryCompactDateUi();
     initLinkedCaseMultiSourceSync();
     initLinkedSchedulePayloadFix();
     initSimilarGeneralCaseWarning();
