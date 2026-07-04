@@ -1,0 +1,87 @@
+.controlled-history-row.controlled-history-row-compact {
+  position: relative;
+  grid-template-columns: 40px 160px minmax(180px, 1fr) 78px 116px 42px !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.controlled-history-row-compact [data-history-note],
+.controlled-history-row-compact [data-history-type],
+.controlled-history-row-compact [data-history-time],
+.controlled-history-row-compact [data-history-date] {
+  min-height: 36px !important;
+  height: 36px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  font-size: 13px !important;
+}
+
+.controlled-history-row-compact [data-history-type] {
+  padding-right: 30px !important;
+}
+
+.controlled-history-time-compact {
+  max-width: 78px !important;
+  text-align: center !important;
+}
+
+.controlled-history-date-compact {
+  max-width: 116px !important;
+  text-align: center !important;
+}
+
+.controlled-history-calendar-button {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border-radius: 12px !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
+
+.controlled-history-native-date {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1250px) {
+  .controlled-history-row.controlled-history-row-compact {
+    grid-template-columns: 36px 142px minmax(160px, 1fr) 72px 110px 40px !important;
+    gap: 7px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .controlled-history-row.controlled-history-row-compact {
+    grid-template-columns: 34px minmax(0, 1fr) 72px 110px 40px !important;
+  }
+
+  .controlled-history-row-compact [data-history-type] {
+    grid-column: 2 / -1 !important;
+  }
+
+  .controlled-history-row-compact [data-history-note] {
+    grid-column: 2 / -1 !important;
+  }
+
+  .controlled-history-row-compact [data-history-time] {
+    grid-column: 3 !important;
+  }
+
+  .controlled-history-row-compact [data-history-date] {
+    grid-column: 4 !important;
+  }
+
+  .controlled-history-row-compact [data-history-pick-today] {
+    grid-column: 5 !important;
+  }
+}
