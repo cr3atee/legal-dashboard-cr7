@@ -64,12 +64,21 @@ async function fixCalendarForm(mode = 'open') {
   }
 
   const ownerSelect = form.elements?.executor;
-  if (ownerSelect && isNew && !ownerSelect.value) ownerSelect.value = '';
+  if (ownerSelect && isNew && !ownerSelect.dataset.userChanged) ownerSelect.value = '';
 }
 
 async function fillOwnerSelect(form) {
   const select = form.elements?.executor;
   if (!(select instanceof HTMLSelectElement)) return;
+
+  if (!select.dataset.ownerChangeBound) {
+    select.dataset.ownerChangeBound = '1';
+    select.addEventListener('change', () => {
+      select.dataset.userChanged = '1';
+    });
+  }
+
+  const isNew = !String(form.elements?.id?.value || '').trim();
 
   if (!ownersLoaded) {
     ownersLoaded = true;
@@ -84,7 +93,12 @@ async function fillOwnerSelect(form) {
     .map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`)
     .join('')}`;
 
-  const existingTaskOwner = getOwnerFromSubtitle();
+  if (isNew && !select.dataset.userChanged) {
+    select.value = '';
+    return;
+  }
+
+  const existingTaskOwner = isNew ? '' : getOwnerFromSubtitle();
   const targetValue = currentValue || existingTaskOwner || '';
   select.value = optionValues.includes(targetValue) ? targetValue : '';
 }
