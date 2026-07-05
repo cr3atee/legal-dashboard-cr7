@@ -106,8 +106,8 @@ async function fillOwnerSelect(form) {
     .map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`)
     .join('')}`;
 
-  if (isPersonalMode(form)) {
-    select.value = '';
+  if (isPersonalMode(form) && currentValue && optionValues.includes(currentValue)) {
+    select.value = currentValue;
     return;
   }
 
@@ -137,14 +137,10 @@ async function loadOwners() {
 }
 
 function keepDateTimeRowVisible(form) {
-  const personal = isPersonalMode(form);
-  ['date', 'time'].forEach(name => {
+  ['executor', 'date', 'time'].forEach(name => {
     const node = form.querySelector(`[data-calendar-field="${name}"]`);
     if (node) node.hidden = false;
   });
-
-  const executor = form.querySelector('[data-calendar-field="executor"]');
-  if (executor) executor.hidden = personal;
 }
 
 function isPersonalMode(form) {
@@ -164,8 +160,6 @@ function normalizeCalendarFormDateForSubmit(form) {
 
 function applyOwnerFromForm(data = {}) {
   const form = document.querySelector('[data-calendar-task-form]');
-  if (form && isPersonalMode(form)) return data;
-
   const selectedOwner = String(form?.elements?.executor?.value || '').trim();
   if (!selectedOwner) return data;
   return {
