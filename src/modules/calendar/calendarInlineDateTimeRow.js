@@ -4,6 +4,7 @@ import { getCurrentUserName } from '../../auth/session.js';
 let initialized = false;
 let ownersLoaded = false;
 let owners = [];
+let formFixTimer = 0;
 
 export function initCalendarInlineDateTimeRow() {
   if (initialized) return;
@@ -44,9 +45,8 @@ export function initCalendarInlineDateTimeRow() {
 }
 
 function scheduleFormFixes(mode) {
-  window.setTimeout(() => fixCalendarForm(mode), 0);
-  window.setTimeout(() => fixCalendarForm(mode), 80);
-  window.setTimeout(() => fixCalendarForm(mode), 220);
+  window.clearTimeout(formFixTimer);
+  formFixTimer = window.setTimeout(() => fixCalendarForm(mode), 40);
 }
 
 async function fixCalendarForm(mode = 'open') {
@@ -77,7 +77,7 @@ async function fixCalendarForm(mode = 'open') {
   }
 
   const ownerSelect = form.elements?.executor;
-  if (ownerSelect && isNew && !ownerSelect.dataset.userChanged) ownerSelect.value = '';
+  if (ownerSelect && isNew && !ownerSelect.dataset.userChanged && !isPersonalMode(form)) ownerSelect.value = '';
 }
 
 async function fillOwnerSelect(form) {
@@ -106,6 +106,11 @@ async function fillOwnerSelect(form) {
     .map(name => `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`)
     .join('')}`;
 
+  if (isPersonalMode(form)) {
+    select.value = '';
+    return;
+  }
+
   if (isNew && !select.dataset.userChanged) {
     select.value = '';
     return;
@@ -132,10 +137,20 @@ async function loadOwners() {
 }
 
 function keepDateTimeRowVisible(form) {
-  ['executor', 'date', 'time'].forEach(name => {
+  const personal = isPersonalMode(form);
+  ['date', 'time'].forEach(name => {
     const node = form.querySelector(`[data-calendar-field="${name}"]`);
     if (node) node.hidden = false;
   });
+
+  const executor = form.querySelector('[data-calendar-field="executor"]');
+  if (executor) executor.hidden = personal;
+}
+
+function isPersonalMode(form) {
+  const selectedType = form.querySelector('input[name="type"]:checked')?.value || '';
+  const scope = form.elements?.event_scope?.value || '';
+  return form.dataset.calendarPersonalMode === '1' || selectedType === 'личное' || scope === 'personal';
 }
 
 function normalizeCalendarFormDateForSubmit(form) {
@@ -149,6 +164,8 @@ function normalizeCalendarFormDateForSubmit(form) {
 
 function applyOwnerFromForm(data = {}) {
   const form = document.querySelector('[data-calendar-task-form]');
+  if (form && isPersonalMode(form)) return data;
+
   const selectedOwner = String(form?.elements?.executor?.value || '').trim();
   if (!selectedOwner) return data;
   return {
