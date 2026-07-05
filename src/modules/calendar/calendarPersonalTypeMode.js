@@ -148,7 +148,7 @@ function fixVisibleFields(form) {
     return;
   }
 
-  setFieldVisible(form, 'executor', false);
+  setFieldVisible(form, 'executor', true);
   setFieldVisible(form, 'date', true);
   setFieldVisible(form, 'time', true);
   setFieldVisible(form, 'desc', false);
