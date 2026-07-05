@@ -15,7 +15,6 @@ import { initCaseUiEnhancements } from './modules/cases/caseUiEnhancements.js';
 import { initAppealCalculatorUiFix } from './modules/cases/appealCalculatorUiFix.js';
 import { initAppealTaskDateBridge } from './modules/cases/appealTaskDateBridge.js';
 import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js';
-import { initCasePkLinking } from './modules/cases/casePkLinking.js';
 import { initGeneralCaseCancellationUi } from './modules/cases/generalCaseCancellationUi.js';
 import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseExecutorSuggestions.js';
 import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
@@ -85,7 +84,6 @@ export function initApp() {
     initControlledHistorySync();
     initControlledHistoryCalendarFix();
     initControlledHistoryCompactDateUi();
-    initCasePkLinking();
     initLinkedCaseMultiSourceSync();
     initLinkedSchedulePayloadFix();
     initSimilarGeneralCaseWarning();
