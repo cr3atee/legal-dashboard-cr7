@@ -22,6 +22,7 @@ import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCas
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNumberFix.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
+import { initRepresentativeLabelTextFix } from './modules/common/representativeLabelTextFix.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
@@ -68,6 +69,7 @@ export function initApp() {
     initAppealTaskDateBridge();
     initAppealActionCleanup();
     initLegalFieldSuggestions();
+    initRepresentativeLabelTextFix();
     initGeneralCasesPage();
     initGeneralCaseCancellationUi();
     initGeneralCaseExecutorSuggestions();
