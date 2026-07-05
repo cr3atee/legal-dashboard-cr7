@@ -99,11 +99,6 @@ export function renderSchedulePage() {
               </label>
 
               <label>
-                <span>Представитель</span>
-                <input name="representative" list="scheduleRepresentativesList" autocomplete="off">
-              </label>
-
-              <label>
                 <span>Результат</span>
                 <input name="category" list="scheduleStagesList" autocomplete="off">
               </label>
@@ -123,14 +118,24 @@ export function renderSchedulePage() {
                 <input name="result" autocomplete="off">
               </label>
 
-              <label class="wide" data-schedule-hearing-date-wrap>
-                <span>Дата судебного заседания</span>
-                <div class="schedule-date-input-row schedule-hearing-datetime-row">
+              <div class="schedule-meta-row wide">
+                <label class="schedule-representative-field">
+                  <span>Представитель</span>
+                  <input name="representative" list="scheduleRepresentativesList" autocomplete="off">
+                </label>
+
+                <label class="schedule-hearing-date-field" data-schedule-hearing-date-wrap>
+                  <span>Дата судебного заседания</span>
                   <input class="schedule-hearing-date-input" name="hearing_date" data-schedule-date maxlength="10" placeholder="ДД.ММ.ГГГГ">
+                </label>
+
+                <label class="schedule-hearing-time-field">
+                  <span>Время</span>
                   <input class="schedule-hearing-time-input" name="time" data-schedule-time maxlength="5" placeholder="ЧЧ:ММ" autocomplete="off" aria-label="Время судебного заседания">
-                  <button class="btn small" data-schedule-hearing-today type="button">Сегодня</button>
-                </div>
-              </label>
+                </label>
+
+                <button class="btn small schedule-hearing-today-button" data-schedule-hearing-today type="button">Сегодня</button>
+              </div>
             </div>
 
             <datalist id="scheduleCourtsList"></datalist>
