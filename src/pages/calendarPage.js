@@ -184,7 +184,7 @@
 
             <div class="calendar-form-grid calendar-main-time-row">
               <label class="calendar-executor-field" data-calendar-field="executor"><span>Исполнитель</span><select name="executor" data-calendar-task-owner><option value="">Не выбран</option></select></label>
-              <label class="calendar-date-field" data-calendar-field="date"><span>Дата</span><input name="date" type="date" required></label>
+              <label class="calendar-date-field" data-calendar-field="date"><span>Дата</span><input name="date" type="text" data-calendar-date-text inputmode="numeric" maxlength="10" placeholder="ДД.ММ.ГГГГ" autocomplete="off" required></label>
               <label class="calendar-time-field" data-calendar-field="time"><span>Время</span><input name="time" data-calendar-time maxlength="5" placeholder="ЧЧ:ММ" autocomplete="off"></label>
             </div>
 
