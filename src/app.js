@@ -23,7 +23,6 @@ import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayl
 import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCaseWarning.js';
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNumberFix.js';
-import { initLinkedCaseDeletionSync } from './modules/cases/linkedCaseDeletionSync.js';
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
@@ -34,12 +33,10 @@ import { initEnforcementPage } from './modules/enforcement/enforcementController
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
 import { initCalendarInlineDateTimeRow } from './modules/calendar/calendarInlineDateTimeRow.js';
-import { initCalendarLinkedCaseEditSync } from './modules/calendar/calendarLinkedCaseEditSync.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
 import { initSchedulePage } from './modules/schedule/scheduleController.js';
-import { initScheduleDateLabelFix } from './modules/schedule/scheduleDateLabelFix.js';
 import { initEmergencyFundPage } from './modules/emergencyFund/emergencyFundController.js';
 import { initMunicipalRegistryPage } from './modules/municipalRegistry/municipalRegistryController.js';
 import { initMeetingsPage } from './modules/meetings/meetingsController.js';
@@ -88,17 +85,14 @@ export function initApp() {
     initLinkedSchedulePayloadFix();
     initSimilarGeneralCaseWarning();
     initCaseCreationGuard();
-    initLinkedCaseDeletionSync();
     initEnforcementPage();
     initCalendarSelectedUserOnly();
     initCalendarPage();
     initControlledHistoryCalendarRouting();
     initCalendarInlineDateTimeRow();
-    initCalendarLinkedCaseEditSync();
     initCalendarTimeLabel();
     initCalendarMoveHistory();
     initSchedulePage();
-    initScheduleDateLabelFix();
     initEmergencyFundPage();
     initMunicipalRegistryPage();
     initMeetingsPage();
