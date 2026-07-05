@@ -40,11 +40,6 @@ export function initCalendarInlineDateTimeRow() {
   window.addEventListener('calendar:edit-task', () => scheduleFormFixes('open'));
   window.addEventListener('calendar:create-for-case', () => scheduleFormFixes('new'));
 
-  const observer = new MutationObserver(() => {
-    if (document.querySelector('[data-calendar-task-dialog][open]')) scheduleFormFixes('open');
-  });
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'hidden'] });
-
   scheduleFormFixes('open');
 }
 
