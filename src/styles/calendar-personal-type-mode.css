@@ -38,8 +38,74 @@
   display: grid !important;
 }
 
+/* Calendar edit dialog actions: link, dots, trash and save in one row. */
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
+}
+
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] .calendar-dialog-left-actions,
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] .calendar-dialog-right-actions {
+  display: contents !important;
+}
+
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] [data-calendar-form-link] {
+  order: 1 !important;
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+}
+
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] [data-calendar-form-more] {
+  order: 2 !important;
+}
+
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] [data-calendar-delete] {
+  order: 3 !important;
+}
+
+#calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] button[type="submit"] {
+  order: 4 !important;
+  margin-left: 0 !important;
+  white-space: nowrap !important;
+}
+
+#calendar .calendar-more-dots-action,
+#calendar .calendar-inline-delete-action {
+  width: 58px !important;
+  min-width: 58px !important;
+  max-width: 58px !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 18px !important;
+}
+
+#calendar .calendar-more-dots-action {
+  font-size: 30px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+}
+
+#calendar .calendar-inline-delete-action svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
 @media (max-width: 720px) {
   #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
     grid-template-columns: 1fr !important;
+  }
+
+  #calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] {
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
   }
 }
