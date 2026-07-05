@@ -8,6 +8,7 @@ import './styles/controlled-editor-overlay-fix.css';
 import './styles/controlled-history-sync.css';
 import './styles/controlled-history-compact-date.css';
 import './styles/similar-general-case-warning.css';
+import './styles/calendar-personal-type-mode.css';
 import { renderAppLayout } from './layout/appLayout.js';
 import { initRouter } from './core/router.js';
 import { initDashboard } from './dashboard/dashboard.js';
@@ -29,6 +30,7 @@ import { initEnforcementPage } from './modules/enforcement/enforcementController
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
 import { initCalendarInlineDateTimeRow } from './modules/calendar/calendarInlineDateTimeRow.js';
+import { initCalendarPersonalTypeMode } from './modules/calendar/calendarPersonalTypeMode.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
@@ -82,6 +84,7 @@ export function initApp() {
     initCalendarPage();
     initControlledHistoryCalendarRouting();
     initCalendarInlineDateTimeRow();
+    initCalendarPersonalTypeMode();
     initCalendarTimeLabel();
     initCalendarMoveHistory();
     initSchedulePage();
