@@ -52,29 +52,42 @@
   display:none !important;
 }
 
-/* Schedule dialog: hearing date, time and today button in one compact row. */
-#schedule [data-schedule-hearing-date-wrap] {
-  max-width:100%;
-}
-#schedule .schedule-hearing-datetime-row {
+/* Schedule dialog: rows order and compact representative/date/time row. */
+#schedule .schedule-meta-row {
   display:flex;
-  align-items:center;
+  align-items:flex-end;
   gap:12px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
+  width:100%;
 }
-#schedule .schedule-hearing-date-input {
+#schedule .schedule-meta-row label {
+  display:grid;
+  min-width:0;
+}
+#schedule .schedule-representative-field {
+  flex:1 1 360px;
+}
+#schedule .schedule-hearing-date-field {
   flex:0 0 220px;
   max-width:220px;
 }
-#schedule .schedule-hearing-time-input {
+#schedule .schedule-hearing-time-field {
   flex:0 0 128px;
   max-width:128px;
+}
+#schedule .schedule-hearing-date-input,
+#schedule .schedule-hearing-time-input {
+  width:100%;
+  box-sizing:border-box;
+}
+#schedule .schedule-hearing-time-input {
   text-align:center;
 }
-#schedule .schedule-hearing-datetime-row .btn {
+#schedule .schedule-hearing-today-button {
   flex:0 0 auto;
   height:42px;
-  align-self:center;
+  align-self:flex-end;
+  margin-bottom:0;
 }
 .reports-plan-exclusion-note { display:block; margin-top:4px; font-size:12px; line-height:1.35; font-weight:500; color:#7b8aa2; }
 .latest-report-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
@@ -271,12 +284,14 @@
   #calendar .calendar-main-time-row {
     grid-template-columns:1fr !important;
   }
-  #schedule .schedule-hearing-datetime-row {
+  #schedule .schedule-meta-row {
+    flex-wrap:wrap;
     align-items:stretch;
   }
-  #schedule .schedule-hearing-date-input,
-  #schedule .schedule-hearing-time-input,
-  #schedule .schedule-hearing-datetime-row .btn {
+  #schedule .schedule-representative-field,
+  #schedule .schedule-hearing-date-field,
+  #schedule .schedule-hearing-time-field,
+  #schedule .schedule-hearing-today-button {
     flex:1 1 100%;
     max-width:none;
   }
