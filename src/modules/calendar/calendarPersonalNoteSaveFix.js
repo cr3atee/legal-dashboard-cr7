@@ -3,6 +3,7 @@ import { showNotification } from '../../layout/notifications.js';
 import { getCurrentUserName } from '../../auth/session.js';
 
 let initialized = false;
+let scheduleOrderTimer = 0;
 
 const PERSONAL_TYPE = 'личное';
 
@@ -21,9 +22,18 @@ export function initCalendarPersonalNoteSaveFix() {
     await savePersonalNote(form);
   }, true);
 
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('[data-schedule-case-form], [data-schedule-case-dialog], [data-schedule-row], [data-schedule-date-add], [data-schedule-case-add]')) {
+      scheduleScheduleDialogOrderFix();
+    }
+  }, true);
+
   window.addEventListener('calendar:reload', refreshCalendarSafely);
   window.addEventListener('general-cases:updated', refreshCalendarSafely);
   window.addEventListener('court-schedule:updated', refreshCalendarSafely);
+  window.addEventListener('app:view-changed', scheduleScheduleDialogOrderFix);
+
+  scheduleScheduleDialogOrderFix();
 }
 
 function refreshCalendarSafely() {
@@ -31,6 +41,89 @@ function refreshCalendarSafely() {
     const refreshButton = document.querySelector('[data-calendar-refresh]');
     if (refreshButton instanceof HTMLButtonElement) refreshButton.click();
   }, 80);
+}
+
+function scheduleScheduleDialogOrderFix() {
+  window.clearTimeout(scheduleOrderTimer);
+  scheduleOrderTimer = window.setTimeout(fixScheduleDialogOrder, 60);
+  window.setTimeout(fixScheduleDialogOrder, 180);
+}
+
+function fixScheduleDialogOrder() {
+  const form = document.querySelector('[data-schedule-case-form]');
+  const grid = form?.querySelector('.schedule-form-grid');
+  if (!(form instanceof HTMLFormElement) || !grid) return;
+
+  const court = getScheduleField(form, 'court');
+  const result = getScheduleField(form, 'category');
+  const plaintiff = getScheduleField(form, 'plaintiff');
+  const defendant = getScheduleField(form, 'defendant');
+  const subject = getScheduleField(form, 'result');
+  const representative = getScheduleField(form, 'representative');
+  const dateInput = form.querySelector('input[name="hearing_date"]');
+  const timeInput = form.querySelector('input[name="time"]');
+  const todayButton = form.querySelector('[data-schedule-hearing-today]');
+
+  if (!court || !result || !plaintiff || !defendant || !subject || !representative || !dateInput || !timeInput) return;
+
+  subject.classList.add('wide');
+  representative.classList.add('schedule-representative-field');
+  representative.classList.remove('wide');
+
+  const dateField = ensureScheduleMetaLabel(form, 'schedule-hearing-date-field', 'Дата судебного заседания', dateInput);
+  const timeField = ensureScheduleMetaLabel(form, 'schedule-hearing-time-field', 'Время', timeInput);
+  const metaRow = ensureScheduleMetaRow(form, grid);
+
+  [court, result, plaintiff, defendant, subject].forEach(node => grid.appendChild(node));
+  metaRow.appendChild(representative);
+  metaRow.appendChild(dateField);
+  metaRow.appendChild(timeField);
+  if (todayButton) {
+    todayButton.classList.add('schedule-hearing-today-button');
+    metaRow.appendChild(todayButton);
+  }
+  grid.appendChild(metaRow);
+
+  removeEmptyScheduleDateWrappers(form);
+}
+
+function getScheduleField(form, inputName) {
+  return form.querySelector(`[name="${inputName}"]`)?.closest('label') || null;
+}
+
+function ensureScheduleMetaRow(form, grid) {
+  let row = form.querySelector('.schedule-meta-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'schedule-meta-row wide';
+  }
+  if (row.parentElement !== grid) grid.appendChild(row);
+  return row;
+}
+
+function ensureScheduleMetaLabel(form, className, title, input) {
+  let label = input.closest(`label.${className}`);
+  if (!label) {
+    label = document.createElement('label');
+    label.className = className;
+    const span = document.createElement('span');
+    span.textContent = title;
+    label.appendChild(span);
+  }
+  if (!label.querySelector('span')) {
+    const span = document.createElement('span');
+    span.textContent = title;
+    label.prepend(span);
+  }
+  if (input.parentElement !== label) label.appendChild(input);
+  return label;
+}
+
+function removeEmptyScheduleDateWrappers(form) {
+  form.querySelectorAll('[data-schedule-hearing-date-wrap], .schedule-date-input-row').forEach(node => {
+    if (node.matches?.('label') && !node.querySelector('input')) node.remove();
+    if (node.matches?.('div') && !node.querySelector('input, button')) node.remove();
+  });
 }
 
 async function savePersonalNote(form) {
