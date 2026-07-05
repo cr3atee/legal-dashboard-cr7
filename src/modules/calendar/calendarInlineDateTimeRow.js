@@ -12,13 +12,25 @@ export function initCalendarInlineDateTimeRow() {
   const createCalendarTask = dbApi.createCalendarTask.bind(dbApi);
   const updateCalendarTask = dbApi.updateCalendarTask.bind(dbApi);
 
-  dbApi.createCalendarTask = data => createCalendarTask(applyOwnerFromForm(data));
-  dbApi.updateCalendarTask = (id, data) => updateCalendarTask(id, applyOwnerFromForm(data));
+  dbApi.createCalendarTask = data => createCalendarTask(normalizeCalendarPayloadDate(applyOwnerFromForm(data)));
+  dbApi.updateCalendarTask = (id, data) => updateCalendarTask(id, normalizeCalendarPayloadDate(applyOwnerFromForm(data)));
 
   document.addEventListener('click', event => {
     if (event.target.closest?.('[data-calendar-new], [data-calendar-plan-add], [data-calendar-task-id], [data-calendar-week-task-id]')) {
       scheduleFormFixes(event.target.closest?.('[data-calendar-new]') ? 'new' : 'open');
     }
+  }, true);
+
+  document.addEventListener('input', event => {
+    if (event.target.matches?.('[data-calendar-date-text]')) {
+      formatRuDateInput(event.target);
+    }
+  }, true);
+
+  document.addEventListener('submit', event => {
+    const form = event.target.closest?.('[data-calendar-task-form]');
+    if (!(form instanceof HTMLFormElement)) return;
+    normalizeCalendarFormDateForSubmit(form);
   }, true);
 
   document.addEventListener('change', event => {
@@ -51,16 +63,22 @@ async function fixCalendarForm(mode = 'open') {
   keepDateTimeRowVisible(form);
 
   const isNew = !String(form.elements?.id?.value || '').trim();
-  const today = todayIso();
+  const todayIsoValue = todayIso();
+  const todayRuValue = isoToRuDate(todayIsoValue);
+  const dateField = form.elements?.date;
 
-  if (isNew && mode === 'new') {
-    if (form.elements?.date) form.elements.date.value = today;
-    if (form.elements?.end_date) form.elements.end_date.value = today;
+  if (dateField && /^\d{4}-\d{2}-\d{2}$/.test(String(dateField.value || ''))) {
+    dateField.value = isoToRuDate(dateField.value);
   }
 
-  if (isNew && !form.elements?.date?.value) {
-    if (form.elements?.date) form.elements.date.value = today;
-    if (form.elements?.end_date) form.elements.end_date.value = today;
+  if (isNew && mode === 'new') {
+    if (dateField) dateField.value = todayRuValue;
+    if (form.elements?.end_date) form.elements.end_date.value = todayIsoValue;
+  }
+
+  if (isNew && !dateField?.value) {
+    if (dateField) dateField.value = todayRuValue;
+    if (form.elements?.end_date) form.elements.end_date.value = todayIsoValue;
   }
 
   const ownerSelect = form.elements?.executor;
@@ -125,6 +143,15 @@ function keepDateTimeRowVisible(form) {
   });
 }
 
+function normalizeCalendarFormDateForSubmit(form) {
+  const dateField = form.elements?.date;
+  if (!(dateField instanceof HTMLInputElement)) return;
+
+  const iso = ruDateToIso(dateField.value) || dateField.value;
+  dateField.value = iso;
+  if (form.elements?.end_date && !form.elements.end_date.value) form.elements.end_date.value = iso;
+}
+
 function applyOwnerFromForm(data = {}) {
   const form = document.querySelector('[data-calendar-task-form]');
   const selectedOwner = String(form?.elements?.executor?.value || '').trim();
@@ -133,6 +160,17 @@ function applyOwnerFromForm(data = {}) {
     ...data,
     user: selectedOwner,
     user_name: selectedOwner
+  };
+}
+
+function normalizeCalendarPayloadDate(data = {}) {
+  const date = ruDateToIso(data.date) || data.date;
+  const endDate = ruDateToIso(data.end_date) || data.end_date || date;
+  return {
+    ...data,
+    date,
+    date_str: date,
+    end_date: endDate
   };
 }
 
@@ -151,6 +189,36 @@ function todayIso() {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0')
   ].join('-');
+}
+
+function formatRuDateInput(input) {
+  const digits = String(input.value || '').replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) {
+    input.value = digits;
+    return;
+  }
+  if (digits.length <= 4) {
+    input.value = `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    return;
+  }
+  input.value = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+}
+
+function ruDateToIso(value) {
+  const match = String(value || '').trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) return '';
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function isoToRuDate(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value || '';
+  return `${match[3]}.${match[2]}.${match[1]}`;
 }
 
 function unique(values) {
