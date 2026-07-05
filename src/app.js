@@ -31,6 +31,7 @@ import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
 import { initCalendarInlineDateTimeRow } from './modules/calendar/calendarInlineDateTimeRow.js';
 import { initCalendarPersonalTypeMode } from './modules/calendar/calendarPersonalTypeMode.js';
+import { initCalendarPersonalNoteSaveFix } from './modules/calendar/calendarPersonalNoteSaveFix.js';
 import { initCalendarSelectedUserOnly } from './modules/calendar/calendarSelectedUserOnly.js';
 import { initCalendarTimeLabel } from './modules/calendar/calendarTimeLabel.js';
 import { initCalendarMoveHistory } from './modules/calendar/calendarMoveHistory.js';
@@ -85,6 +86,7 @@ export function initApp() {
     initControlledHistoryCalendarRouting();
     initCalendarInlineDateTimeRow();
     initCalendarPersonalTypeMode();
+    initCalendarPersonalNoteSaveFix();
     initCalendarTimeLabel();
     initCalendarMoveHistory();
     initSchedulePage();
