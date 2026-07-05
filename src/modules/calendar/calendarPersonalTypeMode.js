@@ -1,3 +1,5 @@
+import { dbApi } from '../../api/dbApi.js';
+
 let initialized = false;
 let scheduled = false;
 let applyTimer = 0;
@@ -16,6 +18,11 @@ const TYPE_LABELS = {
 export function initCalendarPersonalTypeMode() {
   if (initialized) return;
   initialized = true;
+
+  const createCalendarTask = dbApi.createCalendarTask.bind(dbApi);
+  const updateCalendarTask = dbApi.updateCalendarTask.bind(dbApi);
+  dbApi.createCalendarTask = data => createCalendarTask(normalizePersonalPayload(data));
+  dbApi.updateCalendarTask = (id, data) => updateCalendarTask(id, normalizePersonalPayload(data));
 
   document.addEventListener('click', event => {
     if (event.target.closest('[data-calendar-new], [data-calendar-task-id], [data-calendar-week-task-id], [data-calendar-plan-add]')) scheduleFixes();
@@ -168,6 +175,29 @@ function preparePersonalNoteForSubmit(form) {
   if (!isPersonalMode(form)) return;
   const note = String(form.elements.note_text?.value || '').trim();
   if (form.elements.desc) form.elements.desc.value = note || 'Личная заметка';
+}
+
+function normalizePersonalPayload(data = {}) {
+  const personal = String(data.event_scope || '') === 'personal' || String(data.type || '') === PERSONAL_TYPE;
+  if (!personal) return data;
+
+  const note = String(data.private_note || data.note_text || data.desc || '').trim();
+  return {
+    ...data,
+    event_scope: 'personal',
+    type: PERSONAL_TYPE,
+    task_type: PERSONAL_TYPE,
+    personal_kind: data.personal_kind || 'Личное событие',
+    desc: note || data.desc || 'Личная заметка',
+    description: note || data.description || data.desc || 'Личная заметка',
+    note_text: note,
+    private_note: note,
+    court: '',
+    subject: '',
+    assignment: '',
+    general_case_id: null,
+    meeting_id: null
+  };
 }
 
 function syncSubmitButton(form) {
