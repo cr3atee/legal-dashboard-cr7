@@ -99,14 +99,14 @@
   height: 24px !important;
 }
 
-/* General cases table: compact centered vertical ellipsis instead of the long Details button. */
+/* General cases table: compact button with three real centered dots. */
 #cases .general-cases-table .general-related-open-table {
   position: relative !important;
-  width: 46px !important;
-  min-width: 46px !important;
-  max-width: 46px !important;
-  height: 46px !important;
-  min-height: 46px !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
   padding: 0 !important;
   margin: 0 auto !important;
   overflow: hidden !important;
@@ -122,25 +122,27 @@
 }
 
 #cases .general-cases-table .general-related-open-table::after {
-  content: '⋮';
+  content: '' !important;
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;
+  width: 5px !important;
+  height: 23px !important;
   transform: translate(-50%, -50%) !important;
-  color: #17233f !important;
-  font-size: 28px !important;
-  font-weight: 900 !important;
-  line-height: 1 !important;
-  text-indent: 0 !important;
   pointer-events: none !important;
+  text-indent: 0 !important;
+  background:
+    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center top / 5px 5px no-repeat,
+    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center center / 5px 5px no-repeat,
+    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center bottom / 5px 5px no-repeat !important;
 }
 
 #cases .general-cases-table .general-col-actions,
 #cases .general-cases-table th:last-child,
 #cases .general-cases-table td.actions-cell {
-  width: 76px !important;
-  min-width: 76px !important;
-  max-width: 76px !important;
+  width: 78px !important;
+  min-width: 78px !important;
+  max-width: 78px !important;
 }
 
 #cases .general-cases-table td.actions-cell {
