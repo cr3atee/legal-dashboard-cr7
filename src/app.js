@@ -24,9 +24,6 @@ import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNum
 import { initLegalFieldSuggestions } from './modules/common/legalFieldSuggestions.js';
 import { initGeneralCasesPage } from './modules/cases/generalCasesController.js';
 import { initControlledCasesPage } from './modules/controlledCases/controlledCasesController.js';
-import { initControlledHistorySync } from './modules/controlledCases/controlledHistorySync.js';
-import { initControlledHistoryCalendarFix } from './modules/controlledCases/controlledHistoryCalendarFix.js';
-import { initControlledHistoryCompactDateUi } from './modules/controlledCases/controlledHistoryCompactDateUi.js';
 import { initEnforcementPage } from './modules/enforcement/enforcementController.js';
 import { initCalendarPage } from './modules/calendar/calendarController.js';
 import { initControlledHistoryCalendarRouting } from './modules/calendar/controlledHistoryCalendarRouting.js';
@@ -76,9 +73,6 @@ export function initApp() {
     initGeneralCaseExecutorSuggestions();
     initAttendanceBadgeFix();
     initControlledCasesPage();
-    initControlledHistorySync();
-    initControlledHistoryCalendarFix();
-    initControlledHistoryCompactDateUi();
     initSimilarGeneralCaseWarning();
     initCaseCreationGuard();
     initEnforcementPage();
