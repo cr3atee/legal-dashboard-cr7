@@ -99,11 +99,6 @@ export function renderSchedulePage() {
               </label>
 
               <label>
-                <span>Время (ЧЧ:ММ)</span>
-                <input name="time" data-schedule-time maxlength="5" autocomplete="off">
-              </label>
-
-              <label>
                 <span>Представитель</span>
                 <input name="representative" list="scheduleRepresentativesList" autocomplete="off">
               </label>
@@ -128,10 +123,11 @@ export function renderSchedulePage() {
                 <input name="result" autocomplete="off">
               </label>
 
-              <label data-schedule-hearing-date-wrap>
+              <label class="wide" data-schedule-hearing-date-wrap>
                 <span>Дата судебного заседания</span>
-                <div class="schedule-date-input-row">
-                  <input name="hearing_date" data-schedule-date maxlength="10" placeholder="ДД.ММ.ГГГГ">
+                <div class="schedule-date-input-row schedule-hearing-datetime-row">
+                  <input class="schedule-hearing-date-input" name="hearing_date" data-schedule-date maxlength="10" placeholder="ДД.ММ.ГГГГ">
+                  <input class="schedule-hearing-time-input" name="time" data-schedule-time maxlength="5" placeholder="ЧЧ:ММ" autocomplete="off" aria-label="Время судебного заседания">
                   <button class="btn small" data-schedule-hearing-today type="button">Сегодня</button>
                 </div>
               </label>
