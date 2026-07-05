@@ -15,7 +15,6 @@
   order: 99;
 }
 
-#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="executor"][hidden],
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="desc"][hidden],
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="court"][hidden],
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="subject"][hidden],
@@ -24,8 +23,15 @@
 }
 
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
-  grid-template-columns: 164px 118px !important;
-  justify-content: start;
+  grid-template-columns: minmax(220px, 1fr) 164px 118px !important;
+  justify-content: stretch;
+  align-items: end;
+}
+
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="executor"],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="date"],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="time"] {
+  display: grid !important;
 }
 
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="note_text"] {
