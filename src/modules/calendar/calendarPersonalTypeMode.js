@@ -106,35 +106,44 @@ function syncScopeFromType(form) {
   const personal = selected === PERSONAL_TYPE;
   setScopeValue(form, personal ? 'personal' : 'work');
   if (personal && form.elements.personal_kind) form.elements.personal_kind.value = 'Личное событие';
+  form.dataset.calendarPersonalMode = personal ? '1' : '0';
 }
 
 function fixVisibleFields(form) {
   const personal = getSelectedType(form) === PERSONAL_TYPE || getScopeValue(form) === 'personal';
+  form.dataset.calendarPersonalMode = personal ? '1' : '0';
+
   const typeBlock = form.querySelector('[data-calendar-work-fields]');
   if (typeBlock) typeBlock.hidden = false;
 
-  setFieldVisible(form, 'executor', true);
+  if (!personal) {
+    setFieldVisible(form, 'executor', true);
+    setFieldVisible(form, 'date', true);
+    setFieldVisible(form, 'time', true);
+    return;
+  }
+
+  setFieldVisible(form, 'executor', false);
   setFieldVisible(form, 'date', true);
   setFieldVisible(form, 'time', true);
-
-  const hint = form.querySelector('[data-calendar-privacy-hint]');
-  if (hint) hint.hidden = !personal;
-
-  const noteLabel = form.querySelector('[data-calendar-note-label]');
-  if (noteLabel) noteLabel.textContent = personal ? 'Приватная заметка' : 'Заметка / напоминание';
-
-  if (!personal) return;
-
-  setFieldVisible(form, 'desc', true);
-  setFieldVisible(form, 'note_text', true);
+  setFieldVisible(form, 'desc', false);
   setFieldVisible(form, 'court', false);
   setFieldVisible(form, 'subject', false);
   setFieldVisible(form, 'assignment', false);
+  setFieldVisible(form, 'note_text', true);
+
+  const hint = form.querySelector('[data-calendar-privacy-hint]');
+  if (hint) hint.hidden = true;
+
+  const noteLabel = form.querySelector('[data-calendar-note-label]');
+  if (noteLabel) noteLabel.textContent = 'Заметка';
 
   const caseFields = form.querySelector('[data-calendar-case-fields]');
   if (caseFields) caseFields.hidden = true;
   const linkButton = form.querySelector('[data-calendar-form-link]');
   if (linkButton) linkButton.hidden = true;
+  const moreButton = form.querySelector('[data-calendar-form-more]');
+  if (moreButton && !form.elements.id?.value) moreButton.hidden = true;
 }
 
 function setFieldVisible(form, name, visible) {
