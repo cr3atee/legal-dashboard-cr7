@@ -99,7 +99,7 @@
   height: 24px !important;
 }
 
-/* General cases table: compact vertical ellipsis instead of the long Details button. */
+/* General cases table: compact centered vertical ellipsis instead of the long Details button. */
 #cases .general-cases-table .general-related-open-table {
   position: relative !important;
   width: 46px !important;
@@ -108,10 +108,12 @@
   height: 46px !important;
   min-height: 46px !important;
   padding: 0 !important;
+  margin: 0 auto !important;
   overflow: hidden !important;
   color: transparent !important;
   font-size: 0 !important;
-  line-height: 1 !important;
+  line-height: 0 !important;
+  text-indent: -9999px !important;
   border-radius: 14px !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -121,10 +123,16 @@
 
 #cases .general-cases-table .general-related-open-table::after {
   content: '⋮';
-  color: #17233f;
-  font-size: 28px;
-  font-weight: 900;
-  line-height: 1;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  color: #17233f !important;
+  font-size: 28px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  text-indent: 0 !important;
+  pointer-events: none !important;
 }
 
 #cases .general-cases-table .general-col-actions,
