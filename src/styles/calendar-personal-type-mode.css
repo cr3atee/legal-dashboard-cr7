@@ -1,0 +1,16 @@
+#calendar .calendar-event-scope {
+  display: none !important;
+}
+
+#calendar [data-calendar-work-fields][hidden] {
+  display: block !important;
+}
+
+#calendar .calendar-task-types span {
+  display: inline-flex;
+  align-items: center;
+}
+
+#calendar .calendar-personal-type-option {
+  order: 99;
+}
