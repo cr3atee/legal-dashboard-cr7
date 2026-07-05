@@ -54,40 +54,58 @@
 
 /* Schedule dialog: rows order and compact representative/date/time row. */
 #schedule .schedule-meta-row {
-  display:flex;
-  align-items:flex-end;
-  gap:12px;
-  flex-wrap:nowrap;
-  width:100%;
+  display:flex !important;
+  align-items:flex-end !important;
+  gap:12px !important;
+  flex-wrap:nowrap !important;
+  width:100% !important;
+  grid-column:1 / -1 !important;
 }
 #schedule .schedule-meta-row label {
-  display:grid;
-  min-width:0;
+  display:grid !important;
+  min-width:0 !important;
+  writing-mode:horizontal-tb !important;
+}
+#schedule .schedule-meta-row label > span {
+  display:block !important;
+  width:auto !important;
+  white-space:nowrap !important;
+  writing-mode:horizontal-tb !important;
+  word-break:normal !important;
+  overflow-wrap:normal !important;
 }
 #schedule .schedule-representative-field {
-  flex:1 1 360px;
+  flex:1 1 auto !important;
+  min-width:320px !important;
+  max-width:none !important;
+}
+#schedule .schedule-representative-field input {
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
 }
 #schedule .schedule-hearing-date-field {
-  flex:0 0 220px;
-  max-width:220px;
+  flex:0 0 220px !important;
+  max-width:220px !important;
 }
 #schedule .schedule-hearing-time-field {
-  flex:0 0 128px;
-  max-width:128px;
+  flex:0 0 128px !important;
+  max-width:128px !important;
 }
 #schedule .schedule-hearing-date-input,
 #schedule .schedule-hearing-time-input {
-  width:100%;
-  box-sizing:border-box;
+  width:100% !important;
+  box-sizing:border-box !important;
 }
 #schedule .schedule-hearing-time-input {
-  text-align:center;
+  text-align:center !important;
 }
 #schedule .schedule-hearing-today-button {
-  flex:0 0 auto;
-  height:42px;
-  align-self:flex-end;
-  margin-bottom:0;
+  flex:0 0 auto !important;
+  height:42px !important;
+  align-self:flex-end !important;
+  margin-bottom:0 !important;
 }
 .reports-plan-exclusion-note { display:block; margin-top:4px; font-size:12px; line-height:1.35; font-weight:500; color:#7b8aa2; }
 .latest-report-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
@@ -285,15 +303,16 @@
     grid-template-columns:1fr !important;
   }
   #schedule .schedule-meta-row {
-    flex-wrap:wrap;
-    align-items:stretch;
+    flex-wrap:wrap !important;
+    align-items:stretch !important;
   }
   #schedule .schedule-representative-field,
   #schedule .schedule-hearing-date-field,
   #schedule .schedule-hearing-time-field,
   #schedule .schedule-hearing-today-button {
-    flex:1 1 100%;
-    max-width:none;
+    flex:1 1 100% !important;
+    max-width:none !important;
+    min-width:0 !important;
   }
 }
 
