@@ -14,3 +14,26 @@
 #calendar .calendar-personal-type-option {
   order: 99;
 }
+
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="executor"][hidden],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="desc"][hidden],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="court"][hidden],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="subject"][hidden],
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="assignment"][hidden] {
+  display: none !important;
+}
+
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
+  grid-template-columns: 164px 118px !important;
+  justify-content: start;
+}
+
+#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="note_text"] {
+  display: grid !important;
+}
+
+@media (max-width: 720px) {
+  #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
+    grid-template-columns: 1fr !important;
+  }
+}
