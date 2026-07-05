@@ -1,5 +1,6 @@
 let initialized = false;
 let scheduled = false;
+let applyTimer = 0;
 
 const PERSONAL_TYPE = 'личное';
 const TYPE_LABELS = {
@@ -21,12 +22,29 @@ export function initCalendarPersonalTypeMode() {
   }, true);
 
   document.addEventListener('change', event => {
-    if (event.target.closest('[data-calendar-task-form]')) scheduleFixes();
+    const form = event.target.closest('[data-calendar-task-form]');
+    if (!(form instanceof HTMLFormElement)) return;
+
+    if (event.target.matches('input[name="type"], input[name="event_scope"]')) {
+      syncScopeFromType(form);
+      fixVisibleFields(form);
+      syncSubmitButton(form);
+    }
+    scheduleFixes();
+  }, true);
+
+  document.addEventListener('input', event => {
+    const form = event.target.closest('[data-calendar-task-form]');
+    if (!(form instanceof HTMLFormElement)) return;
+    if (isPersonalMode(form)) syncSubmitButton(form);
   }, true);
 
   document.addEventListener('submit', event => {
     const form = event.target.closest('[data-calendar-task-form]');
-    if (form instanceof HTMLFormElement) syncScopeFromType(form);
+    if (!(form instanceof HTMLFormElement)) return;
+    syncScopeFromType(form);
+    preparePersonalNoteForSubmit(form);
+    syncSubmitButton(form);
   }, true);
 
   window.addEventListener('calendar:edit-task', scheduleFixes);
@@ -40,12 +58,11 @@ export function initCalendarPersonalTypeMode() {
 function scheduleFixes() {
   if (scheduled) return;
   scheduled = true;
-  window.setTimeout(() => {
+  window.clearTimeout(applyTimer);
+  applyTimer = window.setTimeout(() => {
     scheduled = false;
     applyCalendarPersonalTypeMode();
-  }, 0);
-  window.setTimeout(applyCalendarPersonalTypeMode, 120);
-  window.setTimeout(applyCalendarPersonalTypeMode, 320);
+  }, 40);
 }
 
 function applyCalendarPersonalTypeMode() {
@@ -58,6 +75,7 @@ function applyCalendarPersonalTypeMode() {
   checkPersonalOptionForExistingTask(form);
   syncScopeFromType(form);
   fixVisibleFields(form);
+  syncSubmitButton(form);
 }
 
 function hideScopeButtons(form) {
@@ -110,7 +128,7 @@ function syncScopeFromType(form) {
 }
 
 function fixVisibleFields(form) {
-  const personal = getSelectedType(form) === PERSONAL_TYPE || getScopeValue(form) === 'personal';
+  const personal = isPersonalMode(form);
   form.dataset.calendarPersonalMode = personal ? '1' : '0';
 
   const typeBlock = form.querySelector('[data-calendar-work-fields]');
@@ -144,6 +162,24 @@ function fixVisibleFields(form) {
   if (linkButton) linkButton.hidden = true;
   const moreButton = form.querySelector('[data-calendar-form-more]');
   if (moreButton && !form.elements.id?.value) moreButton.hidden = true;
+}
+
+function preparePersonalNoteForSubmit(form) {
+  if (!isPersonalMode(form)) return;
+  const note = String(form.elements.note_text?.value || '').trim();
+  if (form.elements.desc) form.elements.desc.value = note || 'Личная заметка';
+}
+
+function syncSubmitButton(form) {
+  const submit = form.querySelector('button[type="submit"]');
+  if (!submit || form.dataset.saving === '1') return;
+  if (isPersonalMode(form)) {
+    submit.disabled = !String(form.elements.date?.value || '').trim();
+  }
+}
+
+function isPersonalMode(form) {
+  return getSelectedType(form) === PERSONAL_TYPE || getScopeValue(form) === 'personal' || form.dataset.calendarPersonalMode === '1';
 }
 
 function setFieldVisible(form, name, visible) {
