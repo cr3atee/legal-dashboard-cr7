@@ -59,32 +59,29 @@ function fixScheduleDialogOrder() {
   const plaintiff = getScheduleField(form, 'plaintiff');
   const defendant = getScheduleField(form, 'defendant');
   const subject = getScheduleField(form, 'result');
-  const representative = getScheduleField(form, 'representative');
+  const representativeInput = form.querySelector('input[name="representative"]');
   const dateInput = form.querySelector('input[name="hearing_date"]');
   const timeInput = form.querySelector('input[name="time"]');
   const todayButton = form.querySelector('[data-schedule-hearing-today]');
 
-  if (!court || !result || !plaintiff || !defendant || !subject || !representative || !dateInput || !timeInput) return;
+  if (!court || !result || !plaintiff || !defendant || !subject || !representativeInput || !dateInput || !timeInput) return;
 
   subject.classList.add('wide');
-  representative.classList.add('schedule-representative-field');
-  representative.classList.remove('wide');
 
-  const dateField = ensureScheduleMetaLabel(form, 'schedule-hearing-date-field', 'Дата судебного заседания', dateInput);
-  const timeField = ensureScheduleMetaLabel(form, 'schedule-hearing-time-field', 'Время', timeInput);
   const metaRow = ensureScheduleMetaRow(form, grid);
+  const representativeField = rebuildScheduleMetaLabel('schedule-representative-field', 'Представитель', representativeInput);
+  const dateField = rebuildScheduleMetaLabel('schedule-hearing-date-field', 'Дата судебного заседания', dateInput);
+  const timeField = rebuildScheduleMetaLabel('schedule-hearing-time-field', 'Время', timeInput);
 
   [court, result, plaintiff, defendant, subject].forEach(node => grid.appendChild(node));
-  metaRow.appendChild(representative);
-  metaRow.appendChild(dateField);
-  metaRow.appendChild(timeField);
+  metaRow.replaceChildren(representativeField, dateField, timeField);
   if (todayButton) {
     todayButton.classList.add('schedule-hearing-today-button');
     metaRow.appendChild(todayButton);
   }
   grid.appendChild(metaRow);
 
-  removeEmptyScheduleDateWrappers(form);
+  removeBrokenScheduleWrappers(form);
 }
 
 function getScheduleField(form, inputName) {
@@ -97,32 +94,29 @@ function ensureScheduleMetaRow(form, grid) {
     row = document.createElement('div');
     row.className = 'schedule-meta-row wide';
   }
+  row.className = 'schedule-meta-row wide';
   if (row.parentElement !== grid) grid.appendChild(row);
   return row;
 }
 
-function ensureScheduleMetaLabel(form, className, title, input) {
-  let label = input.closest(`label.${className}`);
-  if (!label) {
-    label = document.createElement('label');
-    label.className = className;
-    const span = document.createElement('span');
-    span.textContent = title;
-    label.appendChild(span);
-  }
-  if (!label.querySelector('span')) {
-    const span = document.createElement('span');
-    span.textContent = title;
-    label.prepend(span);
-  }
-  if (input.parentElement !== label) label.appendChild(input);
+function rebuildScheduleMetaLabel(className, title, input) {
+  const oldLabel = input.closest('label');
+  const label = document.createElement('label');
+  label.className = className;
+
+  const span = document.createElement('span');
+  span.textContent = title;
+  label.appendChild(span);
+  label.appendChild(input);
+
+  if (oldLabel && oldLabel !== label && oldLabel.parentElement) oldLabel.remove();
   return label;
 }
 
-function removeEmptyScheduleDateWrappers(form) {
-  form.querySelectorAll('[data-schedule-hearing-date-wrap], .schedule-date-input-row').forEach(node => {
-    if (node.matches?.('label') && !node.querySelector('input')) node.remove();
-    if (node.matches?.('div') && !node.querySelector('input, button')) node.remove();
+function removeBrokenScheduleWrappers(form) {
+  form.querySelectorAll('[data-schedule-hearing-date-wrap], .schedule-date-input-row, label').forEach(node => {
+    if (node.matches?.('label') && !node.querySelector('input, select, textarea')) node.remove();
+    if (node.matches?.('div') && !node.querySelector('input, button, select, textarea')) node.remove();
   });
 }
 
