@@ -18,8 +18,6 @@ import { initAppealActionCleanup } from './modules/cases/appealActionCleanup.js'
 import { initGeneralCaseCancellationUi } from './modules/cases/generalCaseCancellationUi.js';
 import { initGeneralCaseExecutorSuggestions } from './modules/cases/generalCaseExecutorSuggestions.js';
 import { initAttendanceBadgeFix } from './modules/cases/attendanceBadgeFix.js';
-import { initLinkedCaseMultiSourceSync } from './modules/cases/linkedCaseMultiSourceSync.js';
-import { initLinkedSchedulePayloadFix } from './modules/cases/linkedSchedulePayloadFix.js';
 import { initSimilarGeneralCaseWarning } from './modules/cases/similarGeneralCaseWarning.js';
 import { initCaseCreationGuard } from './modules/cases/caseCreationGuard.js';
 import { initGeneralCaseAutoNumberFix } from './modules/cases/generalCaseAutoNumberFix.js';
@@ -81,8 +79,6 @@ export function initApp() {
     initControlledHistorySync();
     initControlledHistoryCalendarFix();
     initControlledHistoryCompactDateUi();
-    initLinkedCaseMultiSourceSync();
-    initLinkedSchedulePayloadFix();
     initSimilarGeneralCaseWarning();
     initCaseCreationGuard();
     initEnforcementPage();
