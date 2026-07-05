@@ -4,6 +4,7 @@ import { getCurrentUserName } from '../../auth/session.js';
 
 let initialized = false;
 let scheduleOrderTimer = 0;
+let calendarActionTimer = 0;
 
 const PERSONAL_TYPE = 'личное';
 
@@ -26,14 +27,26 @@ export function initCalendarPersonalNoteSaveFix() {
     if (event.target.closest?.('[data-schedule-case-form], [data-schedule-case-dialog], [data-schedule-row], [data-schedule-date-add], [data-schedule-case-add]')) {
       scheduleScheduleDialogOrderFix();
     }
+    if (event.target.closest?.('[data-calendar-task-form], [data-calendar-task-dialog], [data-calendar-new], [data-calendar-task-id], [data-calendar-week-task-id]')) {
+      scheduleCalendarActionRowFix();
+    }
   }, true);
 
-  window.addEventListener('calendar:reload', refreshCalendarSafely);
+  window.addEventListener('calendar:reload', () => {
+    refreshCalendarSafely();
+    scheduleCalendarActionRowFix();
+  });
   window.addEventListener('general-cases:updated', refreshCalendarSafely);
   window.addEventListener('court-schedule:updated', refreshCalendarSafely);
-  window.addEventListener('app:view-changed', scheduleScheduleDialogOrderFix);
+  window.addEventListener('calendar:edit-task', scheduleCalendarActionRowFix);
+  window.addEventListener('calendar:create-for-case', scheduleCalendarActionRowFix);
+  window.addEventListener('app:view-changed', () => {
+    scheduleScheduleDialogOrderFix();
+    scheduleCalendarActionRowFix();
+  });
 
   scheduleScheduleDialogOrderFix();
+  scheduleCalendarActionRowFix();
 }
 
 function refreshCalendarSafely() {
@@ -41,6 +54,42 @@ function refreshCalendarSafely() {
     const refreshButton = document.querySelector('[data-calendar-refresh]');
     if (refreshButton instanceof HTMLButtonElement) refreshButton.click();
   }, 80);
+}
+
+function scheduleCalendarActionRowFix() {
+  window.clearTimeout(calendarActionTimer);
+  calendarActionTimer = window.setTimeout(fixCalendarActionRow, 60);
+  window.setTimeout(fixCalendarActionRow, 180);
+}
+
+function fixCalendarActionRow() {
+  const form = document.querySelector('[data-calendar-task-form]');
+  const actions = form?.querySelector('.calendar-task-dialog-actions');
+  if (!(form instanceof HTMLFormElement) || !actions) return;
+
+  const linkButton = form.querySelector('[data-calendar-form-link]');
+  const moreButton = form.querySelector('[data-calendar-form-more]');
+  const deleteButton = form.querySelector('[data-calendar-delete]');
+  const submitButton = form.querySelector('button[type="submit"]');
+
+  actions.dataset.calendarActionsInline = '1';
+
+  if (linkButton) {
+    linkButton.classList.add('calendar-inline-link-action');
+    if (String(linkButton.textContent || '').trim() === 'Связать с общим перечнем') {
+      linkButton.textContent = 'Изменить связь с общим перечнем';
+    }
+  }
+
+  if (moreButton) {
+    moreButton.classList.add('calendar-more-dots-action');
+    moreButton.textContent = '⋮';
+    moreButton.title = 'Подробнее';
+    moreButton.setAttribute('aria-label', 'Подробнее');
+  }
+
+  if (deleteButton) deleteButton.classList.add('calendar-inline-delete-action');
+  if (submitButton) submitButton.classList.add('calendar-inline-save-action');
 }
 
 function scheduleScheduleDialogOrderFix() {
