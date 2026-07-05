@@ -99,6 +99,48 @@
   height: 24px !important;
 }
 
+/* General cases table: compact vertical ellipsis instead of the long Details button. */
+#cases .general-cases-table .general-related-open-table {
+  position: relative !important;
+  width: 46px !important;
+  min-width: 46px !important;
+  max-width: 46px !important;
+  height: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  border-radius: 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+}
+
+#cases .general-cases-table .general-related-open-table::after {
+  content: '⋮';
+  color: #17233f;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+#cases .general-cases-table .general-col-actions,
+#cases .general-cases-table th:last-child,
+#cases .general-cases-table td.actions-cell {
+  width: 76px !important;
+  min-width: 76px !important;
+  max-width: 76px !important;
+}
+
+#cases .general-cases-table td.actions-cell {
+  text-align: center !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
 @media (max-width: 720px) {
   #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
     grid-template-columns: 1fr !important;
