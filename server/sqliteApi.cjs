@@ -1826,6 +1826,7 @@ async function syncGeneralCaseLinkedSections(dbPath, generalCaseId) {
 
   const syncSteps = [
     () => syncControlledCaseFromGeneral(dbPath, general),
+    () => syncAttendanceScheduleLegacyFromGeneral(dbPath, general),
     () => syncEmergencyFundFromGeneral(dbPath, general),
     () => syncRegistryFromGeneral(dbPath, general)
   ];
@@ -1856,6 +1857,7 @@ async function syncControlledCaseFromGeneral(dbPath, general) {
     general.defendant || '',
     general.claim_subject || '',
     general.executor || '',
+    general.review_result || '',
     general.court_no || '',
     general.court || '',
     id,
@@ -1866,7 +1868,7 @@ async function syncControlledCaseFromGeneral(dbPath, general) {
     await run(dbPath, `
       UPDATE controlled_cases
       SET case_number=?, plaintiff=?, defendant=?, subject=?, representative=?,
-          court_case_number=?, court=?, general_case_id=?, updated_at=?
+          result=?, court_case_number=?, court=?, general_case_id=?, updated_at=?
       WHERE id=?
     `, [...shared, existing.id]);
     return;
@@ -1891,6 +1893,35 @@ async function syncControlledCaseFromGeneral(dbPath, general) {
     now,
     now
   ]);
+}
+
+async function syncAttendanceScheduleLegacyFromGeneral(dbPath, general) {
+  const id = Number(general.id || 0);
+  if (!id || Number(general.attendance_flag || 0) !== 1) return;
+
+  try { await run(dbPath, 'ALTER TABLE court_schedule ADD COLUMN general_case_id INTEGER'); } catch {}
+  const existing = await get(dbPath, 'SELECT id FROM court_schedule WHERE general_case_id=? LIMIT 1', [id]);
+  const date = general.registration_date || '';
+  const vals = [
+    date,
+    general.court || '',
+    '',
+    general.executor || '',
+    general.plaintiff || '',
+    general.defendant || '',
+    general.category || '',
+    general.claim_subject || '',
+    0,
+    date,
+    id,
+    new Date().toISOString()
+  ];
+
+  if (existing) {
+    await run(dbPath, `UPDATE court_schedule SET session_date=?, court=?, time=?, representative=?, plaintiff=?, defendant=?, category=?, result=?, is_date_row=?, hearing_date=?, general_case_id=?, updated_at=? WHERE id=?`, [...vals, existing.id]);
+  } else {
+    await run(dbPath, `INSERT INTO court_schedule (session_date, court, time, representative, plaintiff, defendant, category, result, is_date_row, hearing_date, general_case_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, vals);
+  }
 }
 
 async function syncEmergencyFundFromGeneral(dbPath, general) {
