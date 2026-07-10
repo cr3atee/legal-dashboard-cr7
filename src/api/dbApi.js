@@ -1,3 +1,5 @@
+import { startGlobalLoading } from '../core/loadingManager.js';
+
 function getSessionToken() {
   try {
     const raw = sessionStorage.getItem('legal-dashboard-auth-session-v1');
@@ -7,19 +9,31 @@ function getSessionToken() {
   }
 }
 
+function loadingTextForRequest(path, options = {}) {
+  if (options.loadingText) return options.loadingText;
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method === 'DELETE') return 'Удаление...';
+  if (method === 'PUT' || method === 'PATCH') return 'Обновление...';
+  if (method === 'POST') return String(path || '').includes('/api/auth/') ? 'Загрузка...' : 'Сохранение...';
+  return 'Загрузка...';
+}
+
 async function request(path, options = {}) {
+  const { loading = true, loadingText, ...fetchOptions } = options;
+  const finishLoading = loading === false ? null : startGlobalLoading(loadingTextForRequest(path, { ...options, loadingText }));
   const token = getSessionToken();
   let response;
   try {
     response = await fetch(path, {
-      ...options,
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {})
+        ...(fetchOptions.headers || {})
       }
     });
   } catch (error) {
+    finishLoading?.();
     throw new Error(`API базы данных недоступен. Проверьте, что приложение запущено в одном экземпляре, затем обновите страницу. ${error?.message || ''}`.trim());
   }
 
@@ -29,6 +43,7 @@ async function request(path, options = {}) {
     : await response.text().catch(() => '');
 
   if (!response.ok) {
+    finishLoading?.();
     if (response.status === 401 && path !== '/api/auth/login') {
       sessionStorage.removeItem('legal-dashboard-auth-session-v1');
       setTimeout(() => window.location.reload(), 0);
@@ -40,31 +55,38 @@ async function request(path, options = {}) {
     throw new Error(message || `HTTP ${response.status}`);
   }
 
+  finishLoading?.();
   return payload;
 }
 
 async function requestBlob(path, options = {}) {
+  const { loading = true, loadingText, ...fetchOptions } = options;
+  const finishLoading = loading === false ? null : startGlobalLoading(loadingText || 'Загрузка...');
   const token = getSessionToken();
   let response;
   try {
     response = await fetch(path, {
-      ...options,
+      ...fetchOptions,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {})
+        ...(fetchOptions.headers || {})
       }
     });
   } catch (error) {
+    finishLoading?.();
     throw new Error(`API базы данных недоступен. ${error?.message || ''}`.trim());
   }
   if (!response.ok) {
+    finishLoading?.();
     if (response.status === 401) {
       sessionStorage.removeItem('legal-dashboard-auth-session-v1');
       setTimeout(() => window.location.reload(), 0);
     }
     throw new Error(await response.text() || `HTTP ${response.status}`);
   }
-  return response.blob();
+  const blob = await response.blob();
+  finishLoading?.();
+  return blob;
 }
 
 function reportsQuery(params = {}) {

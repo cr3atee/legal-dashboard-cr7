@@ -32,6 +32,7 @@
 @import './reports-employee-layout-fix.css';
 @import './report-metrics.css';
 @import './case-experience.css';
+@import './global-loader.css';
 
 .legal-field-suggestions:popover-open {
   inset: auto;
