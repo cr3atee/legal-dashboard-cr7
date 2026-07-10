@@ -78,6 +78,16 @@ export function initMunicipalRegistryPage() {
     }
   });
 
+  window.addEventListener('registry:reload', () => {
+    loadRegistry();
+  });
+
+  window.addEventListener('app:view-changed', event => {
+    if (event.detail?.viewId === 'municipalRegistry') {
+      loadRegistry();
+    }
+  });
+
   window.addEventListener('registry:open-general-case', async event => {
     const generalCaseId = Number(event.detail?.generalCaseId || 0);
     if (!generalCaseId) return;
@@ -418,7 +428,7 @@ function removeRegistryDocument(index) {
 function getCurrentQuarterText() {
   const now = new Date();
   const q = now.getMonth() < 3 ? 'I' : now.getMonth() < 6 ? 'II' : now.getMonth() < 9 ? 'III' : 'IV';
-  return `${q} квартал ${now.getFullYear()} года`;
+  return `${q} квартал ${now.getFullYear()}`;
 }
 function formatRuDateInput(input) {
   let digits = String(input.value || '').replace(/\D/g, '').slice(0, 8);
