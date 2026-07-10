@@ -99,16 +99,50 @@
   height: 24px !important;
 }
 
-/* General cases table: compact button with three real centered dots. */
+/* General cases table: action block with a narrow centered dots button and a right icon stack. */
+#cases .general-cases-table .general-col-actions,
+#cases .general-cases-table th:last-child,
+#cases .general-cases-table td.actions-cell {
+  width: 114px !important;
+  min-width: 114px !important;
+  max-width: 114px !important;
+}
+
+#cases .general-cases-table td.actions-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  vertical-align: middle !important;
+  padding: 8px 6px !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+#cases .general-cases-table td.actions-cell > * {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+
+#cases .general-cases-table .general-table-action-stack {
+  display: grid !important;
+  grid-template-columns: 42px !important;
+  grid-template-rows: 42px 42px !important;
+  gap: 8px !important;
+  align-items: center !important;
+  justify-items: center !important;
+}
+
 #cases .general-cases-table .general-related-open-table {
   position: relative !important;
-  width: 48px !important;
-  min-width: 48px !important;
-  max-width: 48px !important;
-  height: 48px !important;
-  min-height: 48px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 92px !important;
+  min-height: 92px !important;
+  max-height: 92px !important;
   padding: 0 !important;
-  margin: 0 auto !important;
+  margin: 0 !important;
   overflow: hidden !important;
   color: transparent !important;
   font-size: 0 !important;
@@ -119,6 +153,7 @@
   align-items: center !important;
   justify-content: center !important;
   white-space: nowrap !important;
+  box-sizing: border-box !important;
 }
 
 #cases .general-cases-table .general-related-open-table::after {
@@ -126,29 +161,40 @@
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;
-  width: 5px !important;
-  height: 23px !important;
+  width: 4px !important;
+  height: 24px !important;
   transform: translate(-50%, -50%) !important;
   pointer-events: none !important;
   text-indent: 0 !important;
   background:
-    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center top / 5px 5px no-repeat,
-    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center center / 5px 5px no-repeat,
-    radial-gradient(circle, #17233f 0 2.25px, transparent 2.45px) center bottom / 5px 5px no-repeat !important;
+    radial-gradient(circle, #17233f 0 2px, transparent 2.2px) center top / 4px 4px no-repeat,
+    radial-gradient(circle, #17233f 0 2px, transparent 2.2px) center center / 4px 4px no-repeat,
+    radial-gradient(circle, #17233f 0 2px, transparent 2.2px) center bottom / 4px 4px no-repeat !important;
 }
 
-#cases .general-cases-table .general-col-actions,
-#cases .general-cases-table th:last-child,
-#cases .general-cases-table td.actions-cell {
-  width: 78px !important;
-  min-width: 78px !important;
-  max-width: 78px !important;
+#cases .general-cases-table .general-table-action-stack .table-print,
+#cases .general-cases-table .general-table-action-stack .table-edit,
+#cases .general-cases-table td.actions-cell .general-case-print-preview.table-print,
+#cases .general-cases-table td.actions-cell .general-case-edit-icon.table-edit {
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  padding: 0 !important;
+  border-radius: 13px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
 }
 
-#cases .general-cases-table td.actions-cell {
-  text-align: center !important;
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+#cases .general-cases-table .general-table-action-stack svg,
+#cases .general-cases-table td.actions-cell .table-print svg,
+#cases .general-cases-table td.actions-cell .table-edit svg {
+  width: 21px !important;
+  height: 21px !important;
 }
 
 @media (max-width: 720px) {
