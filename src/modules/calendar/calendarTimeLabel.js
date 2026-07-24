@@ -26,16 +26,8 @@ export function initCalendarTimeLabel() {
   initialized = true;
 
   renameCalendarTimeLabel();
-
-  const observer = new MutationObserver(records => {
-    for (const record of records) {
-      record.addedNodes.forEach(node => {
-        if (node instanceof Element) renameCalendarTimeLabel(node);
-      });
-    }
-    renameCalendarTimeLabel();
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('app:view-changed', () => queueMicrotask(() => renameCalendarTimeLabel()));
+  window.addEventListener('calendar:updated', () => renameCalendarTimeLabel());
+  window.addEventListener('calendar:edit-task', () => queueMicrotask(() => renameCalendarTimeLabel()));
   document.addEventListener('click', () => queueMicrotask(() => renameCalendarTimeLabel()), true);
 }

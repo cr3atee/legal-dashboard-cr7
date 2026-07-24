@@ -68,6 +68,8 @@ export function initGeneralCaseSaveNumber() {
     }
   }, true);
 
-  new MutationObserver(prepareField).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('app:view-changed', prepareField);
+  window.addEventListener('general-cases:updated', prepareField);
+  window.addEventListener('general-cases:open-case', () => setTimeout(prepareField, 0));
   prepareField();
 }

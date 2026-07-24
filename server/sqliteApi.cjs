@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const pathModule = require('path');
 const { spawn } = require('child_process');
+const reportEventStore = require('./reportEventStore.cjs');
 
 const activeSessions = new Map();
 const schemaInitialization = new Map();
@@ -108,6 +109,35 @@ function run(dbPath, sql, params = []) {
   });
 }
 
+function connectionGet(db, sql, params = []) {
+  return new Promise((resolve, reject) => db.get(sql, params, (error, row) => error ? reject(error) : resolve(row || null)));
+}
+
+function connectionAll(db, sql, params = []) {
+  return new Promise((resolve, reject) => db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows || [])));
+}
+
+function connectionRun(db, sql, params = []) {
+  return new Promise((resolve, reject) => db.run(sql, params, function onRun(error) {
+    error ? reject(error) : resolve({ id: this.lastID, changes: this.changes });
+  }));
+}
+
+async function withTransaction(dbPath, operation) {
+  const db = openDb(dbPath);
+  try {
+    await connectionRun(db, 'BEGIN IMMEDIATE');
+    const result = await operation(db);
+    await connectionRun(db, 'COMMIT');
+    return result;
+  } catch (error) {
+    try { await connectionRun(db, 'ROLLBACK'); } catch {}
+    throw error;
+  } finally {
+    db.close();
+  }
+}
+
 function initializeSchema(dbPath) {
   return new Promise((resolve, reject) => {
     const db = openDb(dbPath);
@@ -164,7 +194,7 @@ function initializeSchema(dbPath) {
       category TEXT DEFAULT '', procedural_position TEXT DEFAULT '', claim_subject TEXT DEFAULT '', claim_address TEXT DEFAULT '', registration_date TEXT DEFAULT '',
       review_result TEXT DEFAULT '', control_flag INTEGER DEFAULT 0, attendance_flag INTEGER DEFAULT 0, attendance_hearing_missing INTEGER DEFAULT 0, review_show_flag INTEGER DEFAULT 0, emergency_fund_flag INTEGER DEFAULT 0, registry_flag INTEGER DEFAULT 0,
       comments TEXT DEFAULT '', judicial_act_date_first TEXT DEFAULT '', first_instance_act_type TEXT DEFAULT '', motivated_decision_date TEXT DEFAULT '', appeal_act_date TEXT DEFAULT '', cassation_act_date TEXT DEFAULT '', documents_json TEXT DEFAULT '', process_kind TEXT DEFAULT '', act_instance TEXT DEFAULT '', proceeding_form TEXT DEFAULT '', appeal_kind TEXT DEFAULT '', order_copy_date TEXT DEFAULT '', apk_cassation_has_appeal TEXT DEFAULT '', supervision_cassation_exhausted TEXT DEFAULT '', late_motivated_received TEXT DEFAULT '', appeals_json TEXT DEFAULT '',
-      archived_at TEXT DEFAULT CURRENT_TIMESTAMP, plaintiff TEXT DEFAULT '', defendant TEXT DEFAULT ''
+      archived_at TEXT DEFAULT CURRENT_TIMESTAMP, plaintiff TEXT DEFAULT '', defendant TEXT DEFAULT '', linked_data_json TEXT DEFAULT '{}'
     )`);
     // USER REQUEST FIX: ensure appeal date columns exist in older databases.
     const ensureGeneralCaseColumnMigrations = {
@@ -195,6 +225,7 @@ function initializeSchema(dbPath) {
       db.run(`ALTER TABLE general_cases ADD COLUMN ${column} ${type}`, () => {});
       db.run(`ALTER TABLE general_cases_archive ADD COLUMN ${column} ${type}`, () => {});
     }
+    db.run(`ALTER TABLE general_cases_archive ADD COLUMN linked_data_json TEXT DEFAULT '{}'`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS controlled_cases (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,9 +242,13 @@ function initializeSchema(dbPath) {
     db.run(`CREATE TABLE IF NOT EXISTS calendar_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date_str TEXT, user_name TEXT, task_type TEXT, description TEXT, time_val TEXT, court TEXT, subject TEXT, assignment TEXT,
-      metadata_json TEXT DEFAULT '{}', created_at TEXT DEFAULT CURRENT_TIMESTAMP, meeting_id INTEGER, general_case_id INTEGER
+      metadata_json TEXT DEFAULT '{}', created_at TEXT DEFAULT CURRENT_TIMESTAMP, meeting_id INTEGER, general_case_id INTEGER, schedule_id INTEGER
     )`);
     db.run(`ALTER TABLE calendar_tasks ADD COLUMN metadata_json TEXT DEFAULT '{}'`, () => {});
+    db.run(`ALTER TABLE calendar_tasks ADD COLUMN schedule_id INTEGER`, () => {});
+    db.run(`CREATE INDEX IF NOT EXISTS idx_calendar_tasks_schedule_id ON calendar_tasks(schedule_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_calendar_tasks_general_case_id ON calendar_tasks(general_case_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_court_schedule_general_case_id ON court_schedule(general_case_id)`);
 
     db.run(`CREATE TABLE IF NOT EXISTS enforcement_proceedings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -428,6 +463,7 @@ const ensureRegistryColumnMigrations = {
   property_type: "TEXT DEFAULT ''",
   notes: "TEXT DEFAULT ''",
   court: "TEXT DEFAULT ''",
+  court_case_number: "TEXT DEFAULT ''",
   stage: "TEXT DEFAULT ''",
   court_act_date: "TEXT DEFAULT ''",
   court_act_number: "TEXT DEFAULT ''",
@@ -457,6 +493,7 @@ db.run(`CREATE TABLE IF NOT EXISTS registry (
   property_type TEXT DEFAULT '',
   notes TEXT DEFAULT '',
   court TEXT DEFAULT '',
+  court_case_number TEXT DEFAULT '',
   stage TEXT DEFAULT '',
   court_act_date TEXT DEFAULT '',
   court_act_number TEXT DEFAULT '',
@@ -1794,6 +1831,34 @@ function normCase(data = {}) {
   };
 }
 
+async function writeGeneralCase(dbPath, id, data = {}) {
+  const d = normCase(data);
+  await run(dbPath, `UPDATE general_cases SET case_no=?,court_no=?,court=?,judge=?,executor=?,category=?,procedural_position=?,claim_subject=?,claim_address=?,registration_date=?,review_result=?,control_flag=?,attendance_flag=?,attendance_hearing_missing=?,review_show_flag=?,emergency_fund_flag=?,registry_flag=?,comments=?,judicial_act_date_first=?,first_instance_act_type=?,motivated_decision_date=?,appeal_act_date=?,cassation_act_date=?,documents_json=?,process_kind=?,act_instance=?,proceeding_form=?,appeal_kind=?,order_copy_date=?,apk_cassation_has_appeal=?,supervision_cassation_exhausted=?,late_motivated_received=?,appeals_json=?,updated_at=?,plaintiff=?,defendant=? WHERE id=?`, [d.case_no,d.court_no,d.court,d.judge,d.executor,d.category,d.procedural_position,d.claim_subject,d.claim_address,d.registration_date,d.review_result,d.control_flag,d.attendance_flag,d.attendance_hearing_missing,d.review_show_flag,d.emergency_fund_flag,d.registry_flag,d.comments,d.judicial_act_date_first,d.first_instance_act_type,d.motivated_decision_date,d.appeal_act_date,d.cassation_act_date,d.documents_json,d.process_kind,d.act_instance,d.proceeding_form,d.appeal_kind,d.order_copy_date,d.apk_cassation_has_appeal,d.supervision_cassation_exhausted,d.late_motivated_received,d.appeals_json,new Date().toISOString(),d.plaintiff,d.defendant,id]);
+  return get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [id]);
+}
+
+async function syncGeneralCaseMetrics(dbPath, generalCaseId, prosecutorClaimFlag) {
+  const id = Number(generalCaseId || 0);
+  if (!id) return;
+  let value = prosecutorClaimFlag;
+  if (value === undefined) {
+    const existing = await get(dbPath, 'SELECT prosecutor_claim_flag FROM general_case_extra_flags WHERE general_case_id=?', [id]).catch(() => null);
+    value = existing?.prosecutor_claim_flag || 0;
+  }
+  await reportEventStore.saveFlag(dbPath, id, value);
+}
+
+async function updateGeneralCaseFromLinkedSection(dbPath, generalCaseId, patch = {}) {
+  const id = Number(generalCaseId || 0);
+  if (!id) return null;
+  const current = await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [id]);
+  if (!current) return null;
+  const saved = await writeGeneralCase(dbPath, id, { ...current, ...patch, id });
+  await syncGeneralCaseLinkedSections(dbPath, id);
+  await syncGeneralCaseMetrics(dbPath, id);
+  return saved;
+}
+
 
 function controlledValue(data = {}, keys = [], defaultValue = '') {
   for (const key of keys) {
@@ -1897,31 +1962,49 @@ async function syncControlledCaseFromGeneral(dbPath, general) {
 
 async function syncAttendanceScheduleLegacyFromGeneral(dbPath, general) {
   const id = Number(general.id || 0);
-  if (!id || Number(general.attendance_flag || 0) !== 1) return;
+  if (!id) return;
 
-  try { await run(dbPath, 'ALTER TABLE court_schedule ADD COLUMN general_case_id INTEGER'); } catch {}
-  const existing = await get(dbPath, 'SELECT id FROM court_schedule WHERE general_case_id=? LIMIT 1', [id]);
-  const date = general.registration_date || '';
-  const vals = [
-    date,
-    general.court || '',
-    '',
-    general.executor || '',
-    general.plaintiff || '',
-    general.defendant || '',
-    general.category || '',
-    general.claim_subject || '',
-    0,
-    date,
-    id,
-    new Date().toISOString()
-  ];
-
-  if (existing) {
-    await run(dbPath, `UPDATE court_schedule SET session_date=?, court=?, time=?, representative=?, plaintiff=?, defendant=?, category=?, result=?, is_date_row=?, hearing_date=?, general_case_id=?, updated_at=? WHERE id=?`, [...vals, existing.id]);
-  } else {
-    await run(dbPath, `INSERT INTO court_schedule (session_date, court, time, representative, plaintiff, defendant, category, result, is_date_row, hearing_date, general_case_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, vals);
+  const linked = await all(dbPath, 'SELECT * FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0 ORDER BY id', [id]);
+  if (Number(general.attendance_flag || 0) !== 1) {
+    for (const schedule of linked) {
+      const isoDate = ruDateToIsoServer(schedule.session_date || schedule.hearing_date || '');
+      await run(dbPath, `DELETE FROM calendar_tasks
+        WHERE schedule_id=? OR (
+          COALESCE(schedule_id,0)=0 AND general_case_id=?
+          AND COALESCE(date_str,"date",'')=? AND COALESCE(time_val,"time",'')=?
+        )`, [schedule.id, id, isoDate, schedule.time || '']);
+      await reportEventStore.deleteHearing(dbPath, schedule.id);
+    }
+    await run(dbPath, 'DELETE FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0', [id]);
+    return;
   }
+
+  const now = new Date().toISOString();
+  if (!linked.length) {
+    const date = general.registration_date || '';
+    const created = await run(dbPath, `INSERT INTO court_schedule (
+      session_date,court,time,representative,plaintiff,defendant,category,result,
+      is_date_row,hearing_date,general_case_id,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,0,?,?,?,?)`, [
+      date, general.court || '', '', general.executor || '', general.plaintiff || '', general.defendant || '',
+      general.review_result || '', general.claim_subject || '', date, id, now, now
+    ]);
+    await reportEventStore.registerHearing(dbPath, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [created.id]));
+  } else {
+    for (const schedule of linked) {
+      await run(dbPath, `UPDATE court_schedule SET
+        court=?,representative=?,plaintiff=?,defendant=?,category=?,result=?,general_case_id=?,updated_at=?
+        WHERE id=?`, [
+        general.court || '', general.executor || '', general.plaintiff || '', general.defendant || '',
+        general.review_result || '', general.claim_subject || '', id, now, schedule.id
+      ]);
+      await reportEventStore.registerHearing(dbPath, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [schedule.id]));
+    }
+  }
+
+  await run(dbPath, `UPDATE calendar_tasks SET court=?,subject=?,updated_at=? WHERE general_case_id=?`, [
+    general.court || '', general.claim_subject || '', now, id
+  ]);
 }
 
 async function syncEmergencyFundFromGeneral(dbPath, general) {
@@ -1940,7 +2023,7 @@ async function syncEmergencyFundFromGeneral(dbPath, general) {
     await run(dbPath, `
       UPDATE emergency_fund
       SET pk_number=?, pk=?, fio=?, requirements=?, court=?, case_number=?,
-          case_num=?, stage=?, notes=COALESCE(NULLIF(notes, ''), ?), general_case_id=?, updated_at=?
+          case_num=?, stage=?, notes=?, executors=?, general_case_id=?, updated_at=?
       WHERE id=?
     `, [
       general.case_no || '',
@@ -1952,6 +2035,7 @@ async function syncEmergencyFundFromGeneral(dbPath, general) {
       general.court_no || '',
       general.review_result || '',
       general.comments || '',
+      general.executor || '',
       id,
       now,
       existing.id
@@ -1962,9 +2046,9 @@ async function syncEmergencyFundFromGeneral(dbPath, general) {
   await run(dbPath, `
     INSERT INTO emergency_fund (
       pk_number, pk, fio, requirements, court, case_number, case_num, stage,
-      notes, general_case_id, created_at, updated_at
+      notes, executors, general_case_id, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     general.case_no || '',
     general.case_no || '',
@@ -1975,6 +2059,7 @@ async function syncEmergencyFundFromGeneral(dbPath, general) {
     general.court_no || '',
     general.review_result || '',
     general.comments || '',
+    general.executor || '',
     id,
     now,
     now
@@ -1998,9 +2083,8 @@ async function syncRegistryFromGeneral(dbPath, general) {
   if (existing) {
     await run(dbPath, `
       UPDATE registry
-      SET pk_number=?, address=COALESCE(NULLIF(address, ''), ?), fio=COALESCE(NULLIF(fio, ''), ?),
-          notes=COALESCE(NULLIF(notes, ''), ?), court=?, stage=?, requirements=?,
-          execution=COALESCE(NULLIF(execution, ''), ?), general_case_id=?, updated_at=?
+      SET pk_number=?, address=?, fio=?, notes=?, court=?, court_case_number=?, stage=?, requirements=?,
+          execution=?, general_case_id=?, updated_at=?
       WHERE id=?
     `, [
       general.case_no || '',
@@ -2008,6 +2092,7 @@ async function syncRegistryFromGeneral(dbPath, general) {
       fio,
       general.comments || '',
       general.court || '',
+      general.court_no || '',
       general.review_result || '',
       general.claim_subject || '',
       general.executor || '',
@@ -2020,16 +2105,17 @@ async function syncRegistryFromGeneral(dbPath, general) {
 
   await run(dbPath, `
     INSERT INTO registry (
-      pk_number, address, fio, notes, court, stage, requirements, execution,
+      pk_number, address, fio, notes, court, court_case_number, stage, requirements, execution,
       general_case_id, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     general.case_no || '',
     address,
     fio,
     general.comments || '',
     general.court || '',
+    general.court_no || '',
     general.review_result || '',
     general.claim_subject || '',
     general.executor || '',
@@ -2037,6 +2123,142 @@ async function syncRegistryFromGeneral(dbPath, general) {
     now,
     now
   ]);
+}
+
+const SNAPSHOT_TABLES = new Set([
+  'general_cases', 'general_cases_archive', 'controlled_cases', 'emergency_fund', 'registry',
+  'court_schedule', 'calendar_tasks', 'general_case_review_approvals'
+]);
+
+async function insertSnapshot(db, table, row = {}, overrides = {}) {
+  if (!SNAPSHOT_TABLES.has(table)) throw new Error(`unsupported_snapshot_table:${table}`);
+  const schema = await connectionAll(db, `PRAGMA table_info(${table})`);
+  const values = { ...row, ...overrides };
+  const columns = schema.map(column => column.name).filter(name => name !== 'id' && values[name] !== undefined);
+  if (!columns.length) throw new Error(`empty_snapshot:${table}`);
+  const result = await connectionRun(db, `INSERT INTO ${table} (${columns.map(name => `"${name}"`).join(',')}) VALUES (${columns.map(() => '?').join(',')})`, columns.map(name => values[name]));
+  return result.id;
+}
+
+async function archiveGeneralCaseGraph(dbPath, generalCaseId) {
+  const id = Number(generalCaseId || 0);
+  if (!id) return null;
+  return withTransaction(dbPath, async db => {
+    const general = await connectionGet(db, 'SELECT * FROM general_cases WHERE id=?', [id]);
+    if (!general) return null;
+    const snapshot = {
+      controlled: await connectionAll(db, 'SELECT * FROM controlled_cases WHERE general_case_id=? ORDER BY id', [id]),
+      emergency: await connectionAll(db, 'SELECT * FROM emergency_fund WHERE general_case_id=? ORDER BY id', [id]),
+      registry: await connectionAll(db, 'SELECT * FROM registry WHERE general_case_id=? ORDER BY id', [id]),
+      schedules: await connectionAll(db, 'SELECT * FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0 ORDER BY id', [id]),
+      calendars: await connectionAll(db, 'SELECT * FROM calendar_tasks WHERE general_case_id=? ORDER BY id', [id]),
+      approvals: await connectionAll(db, 'SELECT * FROM general_case_review_approvals WHERE general_case_id=? ORDER BY id', [id]),
+      extraFlag: await connectionGet(db, 'SELECT * FROM general_case_extra_flags WHERE general_case_id=?', [id])
+    };
+    const archivedAt = new Date().toISOString();
+    const archiveId = await insertSnapshot(db, 'general_cases_archive', general, {
+      source_id: id,
+      archived_at: archivedAt,
+      linked_data_json: JSON.stringify(snapshot)
+    });
+    for (const controlled of snapshot.controlled) {
+      const exists = await connectionGet(db, 'SELECT id FROM archive WHERE table_name=? AND record_id=? LIMIT 1', ['controlled_cases', controlled.id]);
+      if (!exists) await connectionRun(db, 'INSERT INTO archive (table_name,record_id,data,archived_at) VALUES (?,?,?,?)', ['controlled_cases', controlled.id, JSON.stringify(controlled), archivedAt]);
+    }
+    await connectionRun(db, 'DELETE FROM general_case_review_approvals WHERE general_case_id=?', [id]);
+    await connectionRun(db, 'DELETE FROM calendar_tasks WHERE general_case_id=?', [id]);
+    await connectionRun(db, 'DELETE FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0', [id]);
+    await connectionRun(db, 'DELETE FROM controlled_cases WHERE general_case_id=?', [id]);
+    await connectionRun(db, 'DELETE FROM emergency_fund WHERE general_case_id=?', [id]);
+    await connectionRun(db, 'DELETE FROM registry WHERE general_case_id=?', [id]);
+    await connectionRun(db, 'DELETE FROM general_case_extra_flags WHERE general_case_id=?', [id]);
+    await connectionRun(db, `DELETE FROM report_event_ledger WHERE source_key=? OR source_key LIKE ?
+      OR (json_valid(COALESCE(metadata_json,'{}')) AND json_extract(metadata_json,'$.general_case_id')=?)`, [`case:${id}`, `appeal:${id}:%`, id]);
+    await connectionRun(db, 'DELETE FROM general_cases WHERE id=?', [id]);
+    return { ok: true, archive_id: archiveId, source_id: id };
+  });
+}
+
+async function restoreGeneralCaseGraph(dbPath, archiveId) {
+  const id = Number(archiveId || 0);
+  if (!id) return null;
+  const restored = await withTransaction(dbPath, async db => {
+    const archived = await connectionGet(db, 'SELECT * FROM general_cases_archive WHERE id=?', [id]);
+    if (!archived) return null;
+    const oldGeneralId = Number(archived.source_id || 0);
+    let snapshot = {};
+    try { snapshot = JSON.parse(archived.linked_data_json || '{}') || {}; } catch { snapshot = {}; }
+    const now = new Date().toISOString();
+    const newGeneralId = await insertSnapshot(db, 'general_cases', archived, { created_at: now, updated_at: now });
+    const scheduleIdMap = new Map();
+
+    for (const row of Array.isArray(snapshot.controlled) ? snapshot.controlled : []) {
+      await insertSnapshot(db, 'controlled_cases', row, { general_case_id: newGeneralId, created_at: row.created_at || now, updated_at: now });
+      await connectionRun(db, 'DELETE FROM archive WHERE table_name=? AND record_id=?', ['controlled_cases', row.id]);
+    }
+    for (const row of Array.isArray(snapshot.emergency) ? snapshot.emergency : []) {
+      await insertSnapshot(db, 'emergency_fund', row, { general_case_id: newGeneralId, updated_at: now });
+    }
+    for (const row of Array.isArray(snapshot.registry) ? snapshot.registry : []) {
+      await insertSnapshot(db, 'registry', row, { general_case_id: newGeneralId, updated_at: now });
+    }
+    for (const row of Array.isArray(snapshot.schedules) ? snapshot.schedules : []) {
+      const restoredScheduleId = await insertSnapshot(db, 'court_schedule', row, { general_case_id: newGeneralId, updated_at: now });
+      scheduleIdMap.set(Number(row.id), restoredScheduleId);
+    }
+    for (const row of Array.isArray(snapshot.calendars) ? snapshot.calendars : []) {
+      const oldScheduleId = Number(row.schedule_id || 0);
+      const restoredScheduleId = oldScheduleId ? scheduleIdMap.get(oldScheduleId) || null : null;
+      let metadata = {};
+      try { metadata = JSON.parse(row.metadata_json || '{}') || {}; } catch { metadata = {}; }
+      await insertSnapshot(db, 'calendar_tasks', row, {
+        general_case_id: newGeneralId,
+        schedule_id: restoredScheduleId,
+        metadata_json: JSON.stringify({ ...metadata, general_case_id: newGeneralId, ...(restoredScheduleId ? { schedule_id: restoredScheduleId } : {}) }),
+        updated_at: now
+      });
+    }
+    for (const row of Array.isArray(snapshot.approvals) ? snapshot.approvals : []) {
+      await insertSnapshot(db, 'general_case_review_approvals', row, { general_case_id: newGeneralId, updated_at: now });
+    }
+
+    if (!snapshot.controlled && oldGeneralId) {
+      await connectionRun(db, 'UPDATE controlled_cases SET general_case_id=? WHERE general_case_id=?', [newGeneralId, oldGeneralId]);
+      await connectionRun(db, 'UPDATE emergency_fund SET general_case_id=? WHERE general_case_id=?', [newGeneralId, oldGeneralId]);
+      await connectionRun(db, 'UPDATE registry SET general_case_id=? WHERE general_case_id=?', [newGeneralId, oldGeneralId]);
+      await connectionRun(db, 'UPDATE court_schedule SET general_case_id=? WHERE general_case_id=?', [newGeneralId, oldGeneralId]);
+      await connectionRun(db, `UPDATE calendar_tasks SET general_case_id=?,metadata_json=CASE
+        WHEN json_valid(COALESCE(metadata_json,'{}')) THEN json_set(COALESCE(metadata_json,'{}'),'$.general_case_id',?)
+        ELSE metadata_json END WHERE general_case_id=?`, [newGeneralId, newGeneralId, oldGeneralId]);
+      await connectionRun(db, 'UPDATE general_case_review_approvals SET general_case_id=? WHERE general_case_id=?', [newGeneralId, oldGeneralId]);
+      await connectionRun(db, 'UPDATE general_case_extra_flags SET general_case_id=?,updated_at=? WHERE general_case_id=?', [newGeneralId, now, oldGeneralId]);
+      await connectionRun(db, `DELETE FROM report_event_ledger WHERE source_key=? OR source_key LIKE ?
+        OR (json_valid(COALESCE(metadata_json,'{}')) AND json_extract(metadata_json,'$.general_case_id')=?)`, [`case:${oldGeneralId}`, `appeal:${oldGeneralId}:%`, oldGeneralId]);
+      const archivedControlled = await connectionAll(db, 'SELECT * FROM archive WHERE table_name=? ORDER BY id', ['controlled_cases']);
+      for (const archiveRow of archivedControlled) {
+        let data = {};
+        try { data = JSON.parse(archiveRow.data || '{}'); } catch {}
+        if (Number(data.general_case_id || 0) !== oldGeneralId) continue;
+        await insertSnapshot(db, 'controlled_cases', data, { general_case_id: newGeneralId, updated_at: now });
+        await connectionRun(db, 'DELETE FROM archive WHERE id=?', [archiveRow.id]);
+      }
+    }
+
+    const migratedFlag = !snapshot.extraFlag
+      ? await connectionGet(db, 'SELECT prosecutor_claim_flag FROM general_case_extra_flags WHERE general_case_id=?', [newGeneralId])
+      : null;
+    const prosecutorFlag = Number(snapshot.extraFlag?.prosecutor_claim_flag ?? migratedFlag?.prosecutor_claim_flag ?? 0) ? 1 : 0;
+    await connectionRun(db, `INSERT INTO general_case_extra_flags (general_case_id,prosecutor_claim_flag,updated_at)
+      VALUES (?,?,?) ON CONFLICT(general_case_id) DO UPDATE SET prosecutor_claim_flag=excluded.prosecutor_claim_flag,updated_at=excluded.updated_at`, [newGeneralId, prosecutorFlag, now]);
+    await connectionRun(db, 'DELETE FROM general_cases_archive WHERE id=?', [id]);
+    return { id: newGeneralId, prosecutorFlag };
+  });
+  if (!restored) return null;
+  await syncGeneralCaseLinkedSections(dbPath, restored.id);
+  await syncGeneralCaseMetrics(dbPath, restored.id, restored.prosecutorFlag);
+  const schedules = await all(dbPath, 'SELECT * FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0', [restored.id]);
+  for (const schedule of schedules) await reportEventStore.registerHearing(dbPath, schedule);
+  return get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [restored.id]);
 }
 
 
@@ -2116,8 +2338,62 @@ function normCalendarTask(data = {}) {
     conflict_override: Number(anyValue(data, ['conflict_override'], 0)) ? 1 : 0,
     done: Number(anyValue(data, ['done'], 0)) ? 1 : 0,
     meeting_id: anyValue(data, ['meeting_id'], null),
-    general_case_id: anyValue(data, ['general_case_id'], null)
+    general_case_id: anyValue(data, ['general_case_id'], null),
+    schedule_id: anyValue(data, ['schedule_id', 'scheduleId'], null)
   };
+}
+
+function isAssignmentCalendarTask(data = {}) {
+  return String(data.type || data.task_type || '') === '\u043f\u043e\u0440\u0443\u0447\u0435\u043d\u0438\u0435';
+}
+
+async function findCalendarAssignmentExecutor(dbPath, data = {}) {
+  const rawExecutor = String(anyValue(data, ['executor'], '') || '').trim();
+  const executorId = Number(anyValue(data, ['executor_id', 'executorId', 'assignee_id'], 0))
+    || (/^\d+$/.test(rawExecutor) ? Number(rawExecutor) : 0);
+  const executorName = String(anyValue(data, ['executor_name', 'executor_full_name', 'assignee_name'], '') || '').trim()
+    || (/^\d+$/.test(rawExecutor) ? '' : rawExecutor);
+
+  if (executorId) {
+    const row = await get(dbPath, `
+      SELECT id, full_name
+      FROM users
+      WHERE id=?
+        AND COALESCE(role_level, 1)=1
+        AND COALESCE(is_active, 1)=1
+        AND TRIM(COALESCE(full_name, ''))<>''
+      LIMIT 1
+    `, [executorId]).catch(() => null);
+    if (row?.full_name) return row;
+  }
+
+  if (executorName) {
+    const row = await get(dbPath, `
+      SELECT id, full_name
+      FROM users
+      WHERE full_name=?
+        AND COALESCE(role_level, 1)=1
+        AND COALESCE(is_active, 1)=1
+        AND TRIM(COALESCE(full_name, ''))<>''
+      LIMIT 1
+    `, [executorName]).catch(() => null);
+    if (row?.full_name) return row;
+  }
+
+  return null;
+}
+
+function isHearingCalendarTask(data = {}) {
+  const type = String(data.type || data.task_type || '').toLowerCase();
+  return Boolean(data.schedule_id)
+    || type.includes('hearing')
+    || type.includes('засед')
+    || type === 'судебное_заседание'
+    || type === 'СЃСѓРґРµР±РЅРѕРµ_Р·Р°СЃРµРґР°РЅРёРµ'.toLowerCase();
+}
+
+function calendarTaskRequiresGeneralCase(data = {}) {
+  return Boolean(Number(data.schedule_id || 0));
 }
 
 async function getRequestSession(req, dbPath) {
@@ -2551,6 +2827,7 @@ function normMunicipalRegistry(data = {}) {
     property_type: anyValue(data, ['property_type'], ''),
     notes: anyValue(data, ['notes'], ''),
     court: anyValue(data, ['court'], ''),
+    court_case_number: anyValue(data, ['court_case_number', 'court_no'], ''),
     stage: anyValue(data, ['stage'], ''),
     court_act_date: anyValue(data, ['court_act_date'], ''),
     court_act_number: anyValue(data, ['court_act_number'], ''),
@@ -3281,6 +3558,7 @@ if (meetingsMatchSourcePort) {
       if (!hasPermission(session, PERMISSIONS.CASES_EDIT_ANY)) d.executor = session.full_name;
       const result = await run(dbPath, `INSERT INTO general_cases (case_no,court_no,court,judge,executor,category,procedural_position,claim_subject,claim_address,registration_date,review_result,control_flag,attendance_flag,attendance_hearing_missing,review_show_flag,emergency_fund_flag,registry_flag,comments,judicial_act_date_first,first_instance_act_type,motivated_decision_date,appeal_act_date,cassation_act_date,documents_json,process_kind,act_instance,proceeding_form,appeal_kind,order_copy_date,apk_cassation_has_appeal,supervision_cassation_exhausted,late_motivated_received,appeals_json,created_at,updated_at,plaintiff,defendant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [d.case_no,d.court_no,d.court,d.judge,d.executor,d.category,d.procedural_position,d.claim_subject,d.claim_address,d.registration_date,d.review_result,d.control_flag,d.attendance_flag,d.attendance_hearing_missing,d.review_show_flag,d.emergency_fund_flag,d.registry_flag,d.comments,d.judicial_act_date_first,d.first_instance_act_type,d.motivated_decision_date,d.appeal_act_date,d.cassation_act_date,d.documents_json,d.process_kind,d.act_instance,d.proceeding_form,d.appeal_kind,d.order_copy_date,d.apk_cassation_has_appeal,d.supervision_cassation_exhausted,d.late_motivated_received,d.appeals_json,new Date().toISOString(),new Date().toISOString(),d.plaintiff,d.defendant]);
       await syncGeneralCaseLinkedSections(dbPath, result.id);
+      await syncGeneralCaseMetrics(dbPath, result.id, rawGeneralBody.prosecutor_claim_flag);
       sendJson(res, 201, await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [result.id])); return true;
     }
 
@@ -3327,6 +3605,7 @@ if (meetingsMatchSourcePort) {
       const hearingDate = String(body.hearing_date || '').trim();
       const hearingTime = String(body.hearing_time || body.time || '').trim();
       const currentUser = String(body.user || '').trim();
+      const requestedScheduleId = Number(body.schedule_id || body.scheduleId || 0);
       const isoDate = ruDateToIsoServer(hearingDate);
       const row = await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [id]);
 
@@ -3360,7 +3639,17 @@ if (meetingsMatchSourcePort) {
         new Date().toISOString()
       ];
 
-      const existingSchedule = await get(dbPath, 'SELECT id FROM court_schedule WHERE general_case_id=? AND is_date_row=0 LIMIT 1', [id]);
+      let existingSchedule = null;
+      if (requestedScheduleId) {
+        existingSchedule = await get(dbPath, 'SELECT id FROM court_schedule WHERE id=? AND general_case_id=? AND COALESCE(is_date_row,0)=0', [requestedScheduleId, id]);
+        if (!existingSchedule) { sendJson(res, 404, { error: 'schedule_not_found' }); return true; }
+      } else {
+        existingSchedule = await get(dbPath, `SELECT s.id FROM court_schedule s
+          LEFT JOIN calendar_tasks c ON c.schedule_id=s.id
+          WHERE s.general_case_id=? AND COALESCE(s.is_date_row,0)=0
+            AND COALESCE(s.time,'')='' AND c.id IS NULL
+          ORDER BY s.id LIMIT 1`, [id]);
+      }
       let scheduleRow;
       if (existingSchedule) {
         await run(dbPath, `UPDATE court_schedule SET session_date=?, court=?, time=?, representative=?, plaintiff=?, defendant=?, category=?, result=?, is_date_row=?, hearing_date=?, general_case_id=?, updated_at=? WHERE id=?`, [...scheduleVals, existingSchedule.id]);
@@ -3387,16 +3676,16 @@ if (meetingsMatchSourcePort) {
         new Date().toISOString()
       ];
 
-      const existingTask = await get(dbPath, 'SELECT id FROM calendar_tasks WHERE general_case_id=? LIMIT 1', [id]);
+      const existingTask = await get(dbPath, 'SELECT id FROM calendar_tasks WHERE schedule_id=? LIMIT 1', [scheduleRow.id]);
       let calendarRow;
       if (existingTask) {
-        await run(dbPath, `UPDATE calendar_tasks SET date_str=?, "date"=?, user_name=?, "user"=?, task_type=?, "type"=?, description=?, "desc"=?, time_val=?, "time"=?, court=?, subject=?, assignment=?, done=?, meeting_id=COALESCE(?, meeting_id), general_case_id=?, created_at=COALESCE(created_at, ?) WHERE id=?`, [...calendarVals, existingTask.id]);
+        await run(dbPath, `UPDATE calendar_tasks SET date_str=?, "date"=?, user_name=?, "user"=?, task_type=?, "type"=?, description=?, "desc"=?, time_val=?, "time"=?, court=?, subject=?, assignment=?, done=?, meeting_id=COALESCE(?, meeting_id), general_case_id=?, schedule_id=?, created_at=COALESCE(created_at, ?), updated_at=? WHERE id=?`, [...calendarVals.slice(0, 16), scheduleRow.id, calendarVals[16], new Date().toISOString(), existingTask.id]);
         calendarRow = await get(dbPath, 'SELECT * FROM calendar_tasks WHERE id=?', [existingTask.id]);
       } else {
-        const calendarResult = await run(dbPath, `INSERT INTO calendar_tasks (date_str, "date", user_name, "user", task_type, "type", description, "desc", time_val, "time", court, subject, assignment, done, meeting_id, general_case_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, calendarVals);
+        const calendarResult = await run(dbPath, `INSERT INTO calendar_tasks (date_str, "date", user_name, "user", task_type, "type", description, "desc", time_val, "time", court, subject, assignment, done, meeting_id, general_case_id, schedule_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [...calendarVals.slice(0, 16), scheduleRow.id, calendarVals[16], new Date().toISOString()]);
         calendarRow = await get(dbPath, 'SELECT * FROM calendar_tasks WHERE id=?', [calendarResult.id]);
       }
-
+      await reportEventStore.registerHearing(dbPath, scheduleRow);
       sendJson(res, 200, { ok: true, schedule: scheduleRow, calendar: calendarRow });
       return true;
     }
@@ -3573,16 +3862,12 @@ if (meetingsMatchSourcePort) {
     const generalArchiveRestoreMatch = path.match(/^\/api\/general-cases\/archive\/(\d+)\/restore$/);
     if (generalArchiveRestoreMatch && req.method === 'POST') {
       const archiveId = Number(generalArchiveRestoreMatch[1]);
-      const row = await get(dbPath, 'SELECT * FROM general_cases_archive WHERE id=?', [archiveId]);
-
-      if (!row) {
+      const restored = await restoreGeneralCaseGraph(dbPath, archiveId);
+      if (!restored) {
         sendJson(res, 404, { error: 'general_case_archive_not_found' });
         return true;
       }
-
-      const result = await run(dbPath, `INSERT INTO general_cases (case_no,court_no,court,judge,executor,category,procedural_position,claim_subject,claim_address,registration_date,review_result,control_flag,attendance_flag,attendance_hearing_missing,review_show_flag,emergency_fund_flag,registry_flag,comments,judicial_act_date_first,first_instance_act_type,motivated_decision_date,appeal_act_date,cassation_act_date,documents_json,process_kind,act_instance,proceeding_form,appeal_kind,order_copy_date,apk_cassation_has_appeal,supervision_cassation_exhausted,late_motivated_received,appeals_json,created_at,updated_at,plaintiff,defendant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [row.case_no,row.court_no,row.court,row.judge,row.executor,row.category,row.procedural_position,row.claim_subject,row.claim_address || '',row.registration_date,row.review_result,row.control_flag,row.attendance_flag,row.attendance_hearing_missing || 0,row.review_show_flag || 0,row.emergency_fund_flag || 0,row.registry_flag || 0,row.comments || '',row.judicial_act_date_first || '',row.first_instance_act_type || '',row.motivated_decision_date || '',row.appeal_act_date || '',row.cassation_act_date || '',row.documents_json || '',row.process_kind || '',row.act_instance || '',row.proceeding_form || '',row.appeal_kind || '',row.order_copy_date || '',row.apk_cassation_has_appeal || '',row.supervision_cassation_exhausted || '',row.late_motivated_received || '',row.appeals_json || '',new Date().toISOString(),new Date().toISOString(),row.plaintiff,row.defendant]);
-      await run(dbPath, 'DELETE FROM general_cases_archive WHERE id=?', [archiveId]);
-      sendJson(res, 200, await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [result.id]));
+      sendJson(res, 200, restored);
       return true;
     }
 
@@ -3602,18 +3887,14 @@ if (meetingsMatchSourcePort) {
         const rawGeneralBody = await readBody(req);
         const d = normCase(rawGeneralBody);
         if (!hasPermission(session, PERMISSIONS.CASES_EDIT_ANY)) d.executor = session.full_name;
-        await run(dbPath, `UPDATE general_cases SET case_no=?,court_no=?,court=?,judge=?,executor=?,category=?,procedural_position=?,claim_subject=?,claim_address=?,registration_date=?,review_result=?,control_flag=?,attendance_flag=?,attendance_hearing_missing=?,review_show_flag=?,emergency_fund_flag=?,registry_flag=?,comments=?,judicial_act_date_first=?,first_instance_act_type=?,motivated_decision_date=?,appeal_act_date=?,cassation_act_date=?,documents_json=?,process_kind=?,act_instance=?,proceeding_form=?,appeal_kind=?,order_copy_date=?,apk_cassation_has_appeal=?,supervision_cassation_exhausted=?,late_motivated_received=?,appeals_json=?,updated_at=?,plaintiff=?,defendant=? WHERE id=?`, [d.case_no,d.court_no,d.court,d.judge,d.executor,d.category,d.procedural_position,d.claim_subject,d.claim_address,d.registration_date,d.review_result,d.control_flag,d.attendance_flag,d.attendance_hearing_missing,d.review_show_flag,d.emergency_fund_flag,d.registry_flag,d.comments,d.judicial_act_date_first,d.first_instance_act_type,d.motivated_decision_date,d.appeal_act_date,d.cassation_act_date,d.documents_json,d.process_kind,d.act_instance,d.proceeding_form,d.appeal_kind,d.order_copy_date,d.apk_cassation_has_appeal,d.supervision_cassation_exhausted,d.late_motivated_received,d.appeals_json,new Date().toISOString(),d.plaintiff,d.defendant,id]);
+        await writeGeneralCase(dbPath, id, d);
         await syncGeneralCaseLinkedSections(dbPath, id);
+        await syncGeneralCaseMetrics(dbPath, id, rawGeneralBody.prosecutor_claim_flag);
         sendJson(res, 200, await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [id])); return true;
       }
       if (req.method === 'DELETE') {
         if (!canEditGeneralCase(session, existingCase)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
-        const row = existingCase;
-        if (row) {
-          await run(dbPath, `INSERT INTO general_cases_archive (source_id,case_no,court_no,court,judge,executor,category,procedural_position,claim_subject,claim_address,registration_date,review_result,control_flag,attendance_flag,attendance_hearing_missing,review_show_flag,emergency_fund_flag,registry_flag,comments,judicial_act_date_first,first_instance_act_type,motivated_decision_date,appeal_act_date,cassation_act_date,documents_json,process_kind,act_instance,proceeding_form,appeal_kind,order_copy_date,apk_cassation_has_appeal,supervision_cassation_exhausted,late_motivated_received,appeals_json,archived_at,plaintiff,defendant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [row.id,row.case_no,row.court_no,row.court,row.judge,row.executor,row.category,row.procedural_position,row.claim_subject,row.claim_address || '',row.registration_date,row.review_result,row.control_flag,row.attendance_flag,row.attendance_hearing_missing || 0,row.review_show_flag || 0,row.emergency_fund_flag || 0,row.registry_flag || 0,row.comments || '',row.judicial_act_date_first || '',row.first_instance_act_type || '',row.motivated_decision_date || '',row.appeal_act_date || '',row.cassation_act_date || '',row.documents_json || '',row.process_kind || '',row.act_instance || '',row.proceeding_form || '',row.appeal_kind || '',row.order_copy_date || '',row.apk_cassation_has_appeal || '',row.supervision_cassation_exhausted || '',row.late_motivated_received || '',row.appeals_json || '',new Date().toISOString(),row.plaintiff,row.defendant]);
-          await run(dbPath, 'DELETE FROM general_cases WHERE id=?', [id]);
-        }
-        sendJson(res, 200, { ok: true }); return true;
+        sendJson(res, 200, await archiveGeneralCaseGraph(dbPath, id) || { ok: true }); return true;
       }
     }
 
@@ -3628,6 +3909,25 @@ if (meetingsMatchSourcePort) {
 
     if (path === '/api/controlled-cases' && req.method === 'POST') {
       const d = normControlled(await readBody(req));
+      const generalCaseId = Number(d.general_case_id || 0);
+      if (!generalCaseId || !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [generalCaseId]))) {
+        sendJson(res, 400, { error: 'general_case_id_required' });
+        return true;
+      }
+      const existingControlled = await get(dbPath, 'SELECT id FROM controlled_cases WHERE general_case_id=? ORDER BY id LIMIT 1', [generalCaseId]);
+      if (existingControlled) {
+        await run(dbPath, `UPDATE controlled_cases SET case_number=?,plaintiff=?,defendant=?,subject=?,representative=?,result=?,court_case_number=?,court=?,updated_at=? WHERE id=?`, [
+          d.case_number,d.plaintiff,d.defendant,d.subject,d.representative,d.result,d.court_case_number,d.court,new Date().toISOString(),existingControlled.id
+        ]);
+        const saved = await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [existingControlled.id]);
+        await updateGeneralCaseFromLinkedSection(dbPath, generalCaseId, {
+          ...(saved.case_number ? { case_no: saved.case_number } : {}), plaintiff: saved.plaintiff, defendant: saved.defendant,
+          claim_subject: saved.subject, executor: saved.representative, review_result: saved.result,
+          court_no: saved.court_case_number, court: saved.court, control_flag: 1
+        });
+        sendJson(res, 200, await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [existingControlled.id]));
+        return true;
+      }
       const result = await run(dbPath, `
         INSERT INTO controlled_cases (
           case_number, plaintiff, defendant, subject, representative, result,
@@ -3638,7 +3938,12 @@ if (meetingsMatchSourcePort) {
         d.case_number, d.plaintiff, d.defendant, d.subject, d.representative, d.result,
         d.court_case_number, d.court, d.general_case_id, new Date().toISOString(), new Date().toISOString()
       ]);
-
+      const saved = await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [result.id]);
+      await updateGeneralCaseFromLinkedSection(dbPath, generalCaseId, {
+        ...(saved.case_number ? { case_no: saved.case_number } : {}), plaintiff: saved.plaintiff, defendant: saved.defendant,
+        claim_subject: saved.subject, executor: saved.representative, review_result: saved.result,
+        court_no: saved.court_case_number, court: saved.court, control_flag: 1
+      });
       sendJson(res, 201, await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [result.id]));
       return true;
     }
@@ -3666,6 +3971,14 @@ if (meetingsMatchSourcePort) {
       let parsed = {};
       try { parsed = JSON.parse(archiveRow.data || '{}'); } catch {}
       const d = normControlled(parsed);
+      if (d.general_case_id && !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [d.general_case_id]))) {
+        const generalArchive = await get(dbPath, 'SELECT id FROM general_cases_archive WHERE source_id=? ORDER BY id DESC LIMIT 1', [d.general_case_id]);
+        if (!generalArchive) { sendJson(res, 409, { error: 'linked_general_case_missing' }); return true; }
+        const restoredGeneral = await restoreGeneralCaseGraph(dbPath, generalArchive.id);
+        const restoredControlled = await get(dbPath, 'SELECT * FROM controlled_cases WHERE general_case_id=? ORDER BY id LIMIT 1', [restoredGeneral.id]);
+        sendJson(res, 200, restoredControlled);
+        return true;
+      }
 
       const result = await run(dbPath, `
         INSERT INTO controlled_cases (
@@ -3700,7 +4013,10 @@ if (meetingsMatchSourcePort) {
       }
 
       if (req.method === 'PUT') {
+        const currentControlled = await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [id]);
+        if (!currentControlled) { sendJson(res, 404, { error: 'not_found' }); return true; }
         const d = normControlled(await readBody(req));
+        d.general_case_id = currentControlled.general_case_id;
         await run(dbPath, `
           UPDATE controlled_cases
           SET case_number=?, plaintiff=?, defendant=?, subject=?, representative=?, result=?,
@@ -3711,13 +4027,22 @@ if (meetingsMatchSourcePort) {
           d.court_case_number, d.court, d.general_case_id, new Date().toISOString(), id
         ]);
 
+        const saved = await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [id]);
+        await updateGeneralCaseFromLinkedSection(dbPath, saved?.general_case_id, {
+          ...(saved?.case_number ? { case_no: saved.case_number } : {}), plaintiff: saved?.plaintiff, defendant: saved?.defendant,
+          claim_subject: saved?.subject, executor: saved?.representative, review_result: saved?.result,
+          court_no: saved?.court_case_number, court: saved?.court, control_flag: 1
+        });
         sendJson(res, 200, await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [id]));
         return true;
       }
 
       if (req.method === 'DELETE') {
         const row = await get(dbPath, 'SELECT * FROM controlled_cases WHERE id=?', [id]);
-
+        if (Number(row?.general_case_id || 0)) {
+          sendJson(res, 200, await archiveGeneralCaseGraph(dbPath, row.general_case_id) || { ok: true });
+          return true;
+        }
         if (row) {
           await run(dbPath, 'INSERT INTO archive (table_name, record_id, data, archived_at) VALUES (?, ?, ?, ?)', [
             'controlled_cases',
@@ -3958,8 +4283,21 @@ if (path === '/api/municipal-registry/archive' && req.method === 'GET') {
 
 if (path === '/api/municipal-registry' && req.method === 'POST') {
   const d = normMunicipalRegistry(await readBody(req));
-  const result = await run(dbPath, `INSERT INTO registry (pk_number,kvartal,address,fio,property_type,notes,court,stage,court_act_date,court_act_number,court_act,requirements,appeal,execution,collected,review_ready,attachments_json,general_case_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.stage,d.court_act_date,d.court_act_number,d.court_act || [d.court_act_date,d.court_act_number].filter(Boolean).join(', '),d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),new Date().toISOString()]);
+  if (!d.general_case_id || !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [d.general_case_id]))) {
+    sendJson(res, 400, { error: 'general_case_id_required' }); return true;
+  }
+  if (await get(dbPath, 'SELECT id FROM registry WHERE general_case_id=? LIMIT 1', [d.general_case_id])) {
+    sendJson(res, 409, { error: 'registry_link_exists' }); return true;
+  }
+  const result = await run(dbPath, `INSERT INTO registry (pk_number,kvartal,address,fio,property_type,notes,court,court_case_number,stage,court_act_date,court_act_number,court_act,requirements,appeal,execution,collected,review_ready,attachments_json,general_case_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.court_case_number,d.stage,d.court_act_date,d.court_act_number,d.court_act || [d.court_act_date,d.court_act_number].filter(Boolean).join(', '),d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),new Date().toISOString()]);
+  const saved = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [result.id]);
+  await updateGeneralCaseFromLinkedSection(dbPath, saved.general_case_id, {
+    ...(saved.pk_number ? { case_no: saved.pk_number } : {}), court_no: saved.court_case_number,
+    court: saved.court, plaintiff: saved.fio, claim_address: saved.address,
+    claim_subject: saved.requirements, executor: saved.execution, review_result: saved.stage,
+    comments: saved.notes, registry_flag: 1
+  });
   sendJson(res, 201, await get(dbPath, 'SELECT * FROM registry WHERE id=?', [result.id]));
   return true;
 }
@@ -3970,9 +4308,14 @@ if (registryArchiveRestoreMatch && req.method === 'POST') {
   const archiveRow = await get(dbPath, 'SELECT * FROM archive WHERE id=? AND table_name=?', [archiveId, 'registry']);
   if (!archiveRow) { sendJson(res, 404, { error: 'archive_record_not_found' }); return true; }
   let d = {}; try { d = normMunicipalRegistry(JSON.parse(archiveRow.data || '{}')); } catch { d = normMunicipalRegistry({}); }
-  const result = await run(dbPath, `INSERT INTO registry (pk_number,kvartal,address,fio,property_type,notes,court,stage,court_act_date,court_act_number,court_act,requirements,appeal,execution,collected,review_ready,attachments_json,general_case_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.stage,d.court_act_date,d.court_act_number,d.court_act,d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),new Date().toISOString()]);
+  if (!d.general_case_id || !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [d.general_case_id]))) {
+    sendJson(res, 409, { error: 'linked_general_case_missing' }); return true;
+  }
+  const result = await run(dbPath, `INSERT INTO registry (pk_number,kvartal,address,fio,property_type,notes,court,court_case_number,stage,court_act_date,court_act_number,court_act,requirements,appeal,execution,collected,review_ready,attachments_json,general_case_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.court_case_number,d.stage,d.court_act_date,d.court_act_number,d.court_act,d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),new Date().toISOString()]);
   await run(dbPath, 'DELETE FROM archive WHERE id=? AND table_name=?', [archiveId, 'registry']);
+  const restored = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [result.id]);
+  await updateGeneralCaseFromLinkedSection(dbPath, restored?.general_case_id, { registry_flag: 1 });
   sendJson(res, 200, await get(dbPath, 'SELECT * FROM registry WHERE id=?', [result.id]));
   return true;
 }
@@ -3990,7 +4333,8 @@ if (registryArchiveMatch && req.method === 'POST') {
   const row = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [id]);
   if (!row) { sendJson(res, 404, { error: 'not_found' }); return true; }
   await run(dbPath, 'INSERT INTO archive (table_name, record_id, data) VALUES (?, ?, ?)', ['registry', id, JSON.stringify(row)]);
-  await run(dbPath, 'DELETE FROM registry WHERE id=?', [id]);
+  if (row.general_case_id) await updateGeneralCaseFromLinkedSection(dbPath, row.general_case_id, { registry_flag: 0 });
+  else await run(dbPath, 'DELETE FROM registry WHERE id=?', [id]);
   sendJson(res, 200, { ok: true });
   return true;
 }
@@ -3999,14 +4343,26 @@ const registryMatch = path.match(/^\/api\/municipal-registry\/(\d+)$/);
 if (registryMatch) {
   const id = Number(registryMatch[1]);
   if (req.method === 'PUT') {
+    const currentRegistry = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [id]);
+    if (!currentRegistry) { sendJson(res, 404, { error: 'not_found' }); return true; }
     const d = normMunicipalRegistry(await readBody(req));
-    await run(dbPath, `UPDATE registry SET pk_number=?, kvartal=?, address=?, fio=?, property_type=?, notes=?, court=?, stage=?, court_act_date=?, court_act_number=?, court_act=?, requirements=?, appeal=?, execution=?, collected=?, review_ready=?, attachments_json=?, general_case_id=?, updated_at=? WHERE id=?`,
-      [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.stage,d.court_act_date,d.court_act_number,d.court_act || [d.court_act_date,d.court_act_number].filter(Boolean).join(', '),d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),id]);
+    d.general_case_id = currentRegistry.general_case_id;
+    await run(dbPath, `UPDATE registry SET pk_number=?, kvartal=?, address=?, fio=?, property_type=?, notes=?, court=?, court_case_number=?, stage=?, court_act_date=?, court_act_number=?, court_act=?, requirements=?, appeal=?, execution=?, collected=?, review_ready=?, attachments_json=?, general_case_id=?, updated_at=? WHERE id=?`,
+      [d.pk_number,d.kvartal,d.address,d.fio,d.property_type,d.notes,d.court,d.court_case_number,d.stage,d.court_act_date,d.court_act_number,d.court_act || [d.court_act_date,d.court_act_number].filter(Boolean).join(', '),d.requirements,d.appeal,d.execution,d.collected,d.review_ready,d.attachments_json,d.general_case_id,new Date().toISOString(),id]);
+    const saved = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [id]);
+    await updateGeneralCaseFromLinkedSection(dbPath, saved?.general_case_id, {
+      ...(saved?.pk_number ? { case_no: saved.pk_number } : {}), court_no: saved?.court_case_number,
+      court: saved?.court, plaintiff: saved?.fio, claim_address: saved?.address,
+      claim_subject: saved?.requirements, executor: saved?.execution, review_result: saved?.stage,
+      comments: saved?.notes, registry_flag: 1
+    });
     sendJson(res, 200, await get(dbPath, 'SELECT * FROM registry WHERE id=?', [id]));
     return true;
   }
   if (req.method === 'DELETE') {
-    await run(dbPath, 'DELETE FROM registry WHERE id=?', [id]);
+    const row = await get(dbPath, 'SELECT * FROM registry WHERE id=?', [id]);
+    if (row?.general_case_id) await updateGeneralCaseFromLinkedSection(dbPath, row.general_case_id, { registry_flag: 0 });
+    else await run(dbPath, 'DELETE FROM registry WHERE id=?', [id]);
     sendJson(res, 200, { ok: true });
     return true;
   }
@@ -4033,6 +4389,13 @@ if (path === '/api/emergency-fund' && req.method === 'GET') {
 
 if (path === '/api/emergency-fund' && req.method === 'POST') {
   const d = normEmergencyFund(await readBody(req));
+  const generalCaseId = Number(d.general_case_id || 0);
+  if (!generalCaseId || !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [generalCaseId]))) {
+    sendJson(res, 400, { error: 'general_case_id_required' }); return true;
+  }
+  if (await get(dbPath, 'SELECT id FROM emergency_fund WHERE general_case_id=? LIMIT 1', [generalCaseId])) {
+    sendJson(res, 409, { error: 'emergency_fund_link_exists' }); return true;
+  }
   const result = await run(dbPath, `
     INSERT INTO emergency_fund (
       kvartal, pk_number, fio, prosecutor, address, district, requirements, stage,
@@ -4052,6 +4415,13 @@ if (path === '/api/emergency-fund' && req.method === 'POST') {
     d.condemned_date, d.resettlement_deadline, d.general_case_id, new Date().toISOString(), new Date().toISOString()
   ]);
 
+  const saved = await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [result.id]);
+  await updateGeneralCaseFromLinkedSection(dbPath, saved.general_case_id, {
+    ...(saved.pk_number || saved.pk ? { case_no: saved.pk_number || saved.pk } : {}),
+    court_no: saved.case_number || saved.case_num, court: saved.court, plaintiff: saved.fio,
+    claim_subject: saved.requirements, executor: saved.executors, review_result: saved.stage,
+    comments: saved.notes, emergency_fund_flag: 1
+  });
   sendJson(res, 201, await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [result.id]));
   return true;
 }
@@ -4079,6 +4449,9 @@ if (emergencyArchiveRestoreMatch && req.method === 'POST') {
 
   let d = {};
   try { d = normEmergencyFund(JSON.parse(archiveRow.data || '{}')); } catch { d = normEmergencyFund({}); }
+  if (!Number(d.general_case_id || 0) || !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [d.general_case_id]))) {
+    sendJson(res, 409, { error: 'linked_general_case_missing' }); return true;
+  }
 
   const result = await run(dbPath, `
     INSERT INTO emergency_fund (
@@ -4100,6 +4473,8 @@ if (emergencyArchiveRestoreMatch && req.method === 'POST') {
   ]);
 
   await run(dbPath, 'DELETE FROM archive WHERE id=? AND table_name=?', [archiveId, 'emergency']);
+  const restored = await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [result.id]);
+  await updateGeneralCaseFromLinkedSection(dbPath, restored?.general_case_id, { emergency_fund_flag: 1 });
   sendJson(res, 200, await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [result.id]));
   return true;
 }
@@ -4134,7 +4509,8 @@ if (emergencyArchiveMatch && req.method === 'POST') {
     await run(dbPath, 'INSERT INTO archive (table_name, record_id, data) VALUES (?, ?, ?)', ['emergency', id, JSON.stringify(row)]);
   }
 
-  await run(dbPath, 'DELETE FROM emergency_fund WHERE id=?', [id]);
+  if (row.general_case_id) await updateGeneralCaseFromLinkedSection(dbPath, row.general_case_id, { emergency_fund_flag: 0 });
+  else await run(dbPath, 'DELETE FROM emergency_fund WHERE id=?', [id]);
   sendJson(res, 200, { ok: true });
   return true;
 }
@@ -4144,7 +4520,10 @@ if (emergencyMatch) {
   const id = Number(emergencyMatch[1]);
 
   if (req.method === 'PUT') {
+    const currentEmergency = await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [id]);
+    if (!currentEmergency) { sendJson(res, 404, { error: 'not_found' }); return true; }
     const d = normEmergencyFund(await readBody(req));
+    d.general_case_id = currentEmergency.general_case_id;
     await run(dbPath, `
       UPDATE emergency_fund
       SET kvartal=?, pk_number=?, fio=?, prosecutor=?, address=?, district=?, requirements=?, stage=?,
@@ -4163,12 +4542,21 @@ if (emergencyMatch) {
       d.condemned_date, d.resettlement_deadline, d.general_case_id, new Date().toISOString(), id
     ]);
 
+    const saved = await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [id]);
+    await updateGeneralCaseFromLinkedSection(dbPath, saved?.general_case_id, {
+      ...(saved?.pk_number || saved?.pk ? { case_no: saved.pk_number || saved.pk } : {}),
+      court_no: saved?.case_number || saved?.case_num, court: saved?.court, plaintiff: saved?.fio,
+      claim_subject: saved?.requirements, executor: saved?.executors, review_result: saved?.stage,
+      comments: saved?.notes, emergency_fund_flag: 1
+    });
     sendJson(res, 200, await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [id]));
     return true;
   }
 
   if (req.method === 'DELETE') {
-    await run(dbPath, 'DELETE FROM emergency_fund WHERE id=?', [id]);
+    const row = await get(dbPath, 'SELECT * FROM emergency_fund WHERE id=?', [id]);
+    if (row?.general_case_id) await updateGeneralCaseFromLinkedSection(dbPath, row.general_case_id, { emergency_fund_flag: 0 });
+    else await run(dbPath, 'DELETE FROM emergency_fund WHERE id=?', [id]);
     sendJson(res, 200, { ok: true });
     return true;
   }
@@ -4233,6 +4621,15 @@ if (emergencyMatch) {
         sendJson(res, 400, { error: 'session_date_required' });
         return true;
       }
+      const generalCaseId = Number(d.general_case_id || 0);
+      if (!generalCaseId && !Number(d.meeting_id || 0)) {
+        sendJson(res, 400, { error: 'general_case_id_required' });
+        return true;
+      }
+      if (generalCaseId && !(await get(dbPath, 'SELECT id FROM general_cases WHERE id=?', [generalCaseId]))) {
+        sendJson(res, 400, { error: 'general_case_not_found' });
+        return true;
+      }
 
       const result = await run(dbPath, `
         INSERT INTO court_schedule (
@@ -4242,9 +4639,17 @@ if (emergencyMatch) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
       `, [
         d.session_date, d.court, d.time, d.representative, d.plaintiff, d.defendant,
-        d.category, d.result, d.hearing_date, d.general_case_id, d.meeting_id, new Date().toISOString(), new Date().toISOString()
+        d.category, d.result, d.hearing_date, generalCaseId, d.meeting_id, new Date().toISOString(), new Date().toISOString()
       ]);
-
+      const saved = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [result.id]);
+      if (generalCaseId) {
+        await updateGeneralCaseFromLinkedSection(dbPath, generalCaseId, {
+          court: saved.court, executor: saved.representative, plaintiff: saved.plaintiff,
+          defendant: saved.defendant, review_result: saved.category, claim_subject: saved.result,
+          attendance_flag: 1
+        });
+      }
+      await reportEventStore.registerHearing(dbPath, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [result.id]));
       sendJson(res, 201, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [result.id]));
       return true;
     }
@@ -4258,6 +4663,7 @@ if (emergencyMatch) {
         const existingSchedule = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [id]);
         if (!canEditScheduleRow(session, existingSchedule)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
         const d = normSchedule(await readBody(req));
+        d.general_case_id = existingSchedule.general_case_id;
         if (!hasPermission(session, PERMISSIONS.SCHEDULE_EDIT_ANY)) d.representative = session.full_name;
         await run(dbPath, `
           UPDATE court_schedule
@@ -4268,7 +4674,17 @@ if (emergencyMatch) {
           d.session_date, d.court, d.time, d.representative, d.plaintiff, d.defendant,
           d.category, d.result, d.hearing_date, d.general_case_id, d.meeting_id, new Date().toISOString(), id
         ]);
-
+        const saved = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [id]);
+        await updateGeneralCaseFromLinkedSection(dbPath, saved?.general_case_id, {
+          court: saved?.court, executor: saved?.representative, plaintiff: saved?.plaintiff,
+          defendant: saved?.defendant, review_result: saved?.category, claim_subject: saved?.result,
+          attendance_flag: 1
+        });
+        const isoDate = ruDateToIsoServer(saved?.session_date || saved?.hearing_date || '');
+        await run(dbPath, `UPDATE calendar_tasks SET date_str=?,"date"=?,time_val=?,"time"=?,court=?,subject=?,updated_at=? WHERE schedule_id=?`, [
+          isoDate, isoDate, saved?.time || '', saved?.time || '', saved?.court || '', saved?.result || '', new Date().toISOString(), id
+        ]);
+        await reportEventStore.registerHearing(dbPath, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [id]));
         sendJson(res, 200, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [id]));
         return true;
       }
@@ -4277,7 +4693,13 @@ if (emergencyMatch) {
         const session = await getRequestSession(req, dbPath);
         const existingSchedule = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [id]);
         if (!canEditScheduleRow(session, existingSchedule)) { sendJson(res, 403, { error: 'forbidden' }); return true; }
+        await run(dbPath, 'DELETE FROM calendar_tasks WHERE schedule_id=?', [id]);
         await run(dbPath, 'DELETE FROM court_schedule WHERE id=?', [id]);
+        await reportEventStore.deleteHearing(dbPath, id);
+        if (existingSchedule?.general_case_id) {
+          const remaining = await get(dbPath, 'SELECT COUNT(*) AS count FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0', [existingSchedule.general_case_id]);
+          if (!Number(remaining?.count || 0)) await updateGeneralCaseFromLinkedSection(dbPath, existingSchedule.general_case_id, { attendance_flag: 0 });
+        }
         sendJson(res, 200, { ok: true });
         return true;
       }
@@ -4364,6 +4786,7 @@ if (emergencyMatch) {
           COALESCE(done, 0) AS done,
           meeting_id,
           general_case_id,
+          schedule_id,
           created_at,
           updated_at
         FROM calendar_tasks
@@ -4382,8 +4805,34 @@ if (emergencyMatch) {
         sendJson(res, 401, { error: 'auth_required' });
         return true;
       }
-      const d = normCalendarTask(await readBody(req));
-      d.user = session.full_name;
+      const body = await readBody(req);
+      const d = normCalendarTask(body);
+      if (isAssignmentCalendarTask(d)) {
+        if (normalizeRoleLevel(session.role_level) < ROLE_LEVELS.MAIN_ADMIN) {
+          sendJson(res, 403, { error: 'assignment_admin_required' });
+          return true;
+        }
+        const executor = await findCalendarAssignmentExecutor(dbPath, body);
+        if (!executor?.full_name) {
+          sendJson(res, 400, { error: 'assignment_executor_required' });
+          return true;
+        }
+        d.user = executor.full_name;
+      } else {
+        d.user = session.full_name;
+      }
+      if (d.schedule_id) {
+        const linkedSchedule = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=? AND COALESCE(is_date_row,0)=0', [d.schedule_id]);
+        if (!linkedSchedule) { sendJson(res, 400, { error: 'schedule_not_found' }); return true; }
+        if (!d.general_case_id) d.general_case_id = linkedSchedule.general_case_id;
+        if (Number(d.general_case_id || 0) !== Number(linkedSchedule.general_case_id || 0)) {
+          sendJson(res, 409, { error: 'schedule_case_mismatch' }); return true;
+        }
+      }
+      if (calendarTaskRequiresGeneralCase(d) && !Number(d.general_case_id || 0) && !Number(d.meeting_id || 0)) {
+        sendJson(res, 400, { error: 'general_case_id_required' });
+        return true;
+      }
       if (d.general_case_id) {
         const linkedCase = await get(dbPath, 'SELECT id FROM general_cases WHERE id=? LIMIT 1', [d.general_case_id]);
         if (!linkedCase) {
@@ -4396,13 +4845,13 @@ if (emergencyMatch) {
         INSERT INTO calendar_tasks (
           date_str, "date", end_date, user_name, "user", task_type, "type", event_scope, personal_kind,
           description, "desc", time_val, "time", end_time, court, subject, assignment, note_text, private_note, metadata_json,
-          delegated_to, delegated_by, delegation_status, delegation_source_event_id, conflict_override, done, meeting_id, general_case_id, created_at, updated_at
+          delegated_to, delegated_by, delegation_status, delegation_source_event_id, conflict_override, done, meeting_id, general_case_id, schedule_id, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         d.date, d.date, d.end_date, d.user, d.user, d.type, d.type, d.event_scope, d.personal_kind,
         d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note, d.metadata_json,
-        d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id,
+        d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id, d.schedule_id,
         now, now
       ]);
 
@@ -4464,6 +4913,19 @@ if (emergencyMatch) {
       if (req.method === 'PUT') {
         const d = normCalendarTask(await readBody(req));
         d.user = existing.user_name || existing.user || session.full_name;
+        if (!d.schedule_id) d.schedule_id = existing.schedule_id || null;
+        if (d.schedule_id) {
+          const linkedSchedule = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=? AND COALESCE(is_date_row,0)=0', [d.schedule_id]);
+          if (!linkedSchedule) { sendJson(res, 400, { error: 'schedule_not_found' }); return true; }
+          if (!d.general_case_id) d.general_case_id = linkedSchedule.general_case_id;
+          if (Number(d.general_case_id || 0) !== Number(linkedSchedule.general_case_id || 0)) {
+            sendJson(res, 409, { error: 'schedule_case_mismatch' }); return true;
+          }
+        }
+        if (calendarTaskRequiresGeneralCase(d) && !Number(d.general_case_id || 0) && !Number(d.meeting_id || 0)) {
+          sendJson(res, 400, { error: 'general_case_id_required' });
+          return true;
+        }
         if (d.general_case_id) {
           const linkedCase = await get(dbPath, 'SELECT id FROM general_cases WHERE id=? LIMIT 1', [d.general_case_id]);
           if (!linkedCase) {
@@ -4475,15 +4937,26 @@ if (emergencyMatch) {
           UPDATE calendar_tasks
           SET date_str=?, "date"=?, end_date=?, user_name=?, "user"=?, task_type=?, "type"=?, event_scope=?, personal_kind=?,
               description=?, "desc"=?, time_val=?, "time"=?, end_time=?, court=?, subject=?, assignment=?, note_text=?, private_note=?, metadata_json=?,
-              delegated_to=?, delegated_by=?, delegation_status=?, delegation_source_event_id=?, conflict_override=?, done=?, meeting_id=?, general_case_id=?, updated_at=?
+              delegated_to=?, delegated_by=?, delegation_status=?, delegation_source_event_id=?, conflict_override=?, done=?, meeting_id=?, general_case_id=?, schedule_id=?, updated_at=?
           WHERE id=?
         `, [
           d.date, d.date, d.end_date, d.user, d.user, d.type, d.type, d.event_scope, d.personal_kind,
           d.desc, d.desc, d.time, d.time, d.end_time, d.court, d.subject, d.assignment, d.note_text, d.private_note, d.metadata_json,
-          d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id,
+          d.delegated_to, d.delegated_by, d.delegation_status, d.delegation_source_event_id, d.conflict_override, d.done, d.meeting_id, d.general_case_id, d.schedule_id,
           new Date().toISOString(), id
         ]);
-
+        const saved = await get(dbPath, 'SELECT * FROM calendar_tasks WHERE id=?', [id]);
+        await updateGeneralCaseFromLinkedSection(dbPath, saved?.general_case_id, {
+          court: saved?.court, claim_subject: saved?.subject
+        });
+        if (saved?.schedule_id) {
+          const ruDate = String(saved.date_str || saved.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          const sessionDate = ruDate ? `${ruDate[3]}.${ruDate[2]}.${ruDate[1]}` : '';
+          await run(dbPath, `UPDATE court_schedule SET session_date=COALESCE(NULLIF(?,''),session_date),hearing_date=COALESCE(NULLIF(?,''),hearing_date),time=?,court=?,result=?,updated_at=? WHERE id=?`, [
+            sessionDate, sessionDate, saved.time_val || saved.time || '', saved.court || '', saved.subject || '', new Date().toISOString(), saved.schedule_id
+          ]);
+          await reportEventStore.registerHearing(dbPath, await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [saved.schedule_id]));
+        }
         sendJson(res, 200, await get(dbPath, 'SELECT * FROM calendar_tasks WHERE id=?', [id]));
         return true;
       }
@@ -4491,6 +4964,15 @@ if (emergencyMatch) {
       if (req.method === 'DELETE') {
         if (String(existing.event_scope || '') === 'personal') {
           await run(dbPath, `UPDATE calendar_tasks SET delegated_to='', delegated_by='', delegation_status='', delegation_source_event_id=NULL, updated_at=? WHERE delegation_source_event_id=?`, [new Date().toISOString(), id]);
+        }
+        if (existing.schedule_id) {
+          const schedule = await get(dbPath, 'SELECT * FROM court_schedule WHERE id=?', [existing.schedule_id]);
+          await run(dbPath, 'DELETE FROM court_schedule WHERE id=?', [existing.schedule_id]);
+          await reportEventStore.deleteHearing(dbPath, existing.schedule_id);
+          if (schedule?.general_case_id) {
+            const remaining = await get(dbPath, 'SELECT COUNT(*) AS count FROM court_schedule WHERE general_case_id=? AND COALESCE(is_date_row,0)=0', [schedule.general_case_id]);
+            if (!Number(remaining?.count || 0)) await updateGeneralCaseFromLinkedSection(dbPath, schedule.general_case_id, { attendance_flag: 0 });
+          }
         }
         await run(dbPath, 'DELETE FROM calendar_tasks WHERE id=?', [id]);
         sendJson(res, 200, { ok: true });
@@ -4531,6 +5013,20 @@ if (emergencyMatch) {
     }
     if (err?.code === 'REPORT_FILE_TOO_LARGE') {
       sendJson(res, 413, { error: 'file_too_large', max_mb: 100, message: err.message });
+      return true;
+    }
+    if (err?.code === 'SQLITE_CONSTRAINT') {
+      const message = String(err.message || 'constraint_failed');
+      const error = message.includes('duplicate_general_case_number')
+        ? 'duplicate_general_case_number'
+        : message.includes('duplicate_controlled_general_case')
+          ? 'duplicate_controlled_general_case'
+          : message.includes('duplicate_emergency_general_case')
+            ? 'duplicate_emergency_general_case'
+            : message.includes('duplicate_registry_general_case')
+              ? 'duplicate_registry_general_case'
+              : 'constraint_failed';
+      sendJson(res, 409, { error, message });
       return true;
     }
     console.error(err);

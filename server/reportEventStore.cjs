@@ -163,6 +163,7 @@ async function upsertEvent(dbPath, event) {
     event_type,source_key,event_date,report_year,report_quarter,employee,category,subject,metadata_json,created_at,updated_at
   ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
   ON CONFLICT(source_key) DO UPDATE SET
+    event_type=excluded.event_type,event_date=excluded.event_date,report_year=excluded.report_year,report_quarter=excluded.report_quarter,
     employee=excluded.employee,category=excluded.category,subject=excluded.subject,
     metadata_json=excluded.metadata_json,updated_at=excluded.updated_at`, [
     event.event_type,
@@ -328,6 +329,88 @@ function markerRows(caseRows) {
   return [...counts.entries()].map(([label, count]) => ({ label, count }));
 }
 
+async function syncCaseEvents(dbPath, row, prosecutorFlag = 0) {
+  const caseId = Number(row?.source_id || row?.id || 0);
+  if (!caseId) return;
+  const eventDate = row.created_at || row.registration_date || row.archived_at || new Date().toISOString();
+  await upsertEvent(dbPath, {
+    event_type: 'case',
+    source_key: `case:${caseId}`,
+    event_date: eventDate,
+    employee: row.executor,
+    category: row.category,
+    subject: row.claim_subject,
+    metadata: caseMetadata(row, prosecutorFlag)
+  });
+
+  const appeals = parseJson(row.appeals_json, []);
+  const sourceKeys = [];
+  if (Array.isArray(appeals)) {
+    for (let index = 0; index < appeals.length; index += 1) {
+      const item = appeals[index] || {};
+      if (isHearingCalculatorItem(item) || !hasDatedAppeal(item)) continue;
+      const sourceKey = appealKey(caseId, item, index);
+      sourceKeys.push(sourceKey);
+      await upsertEvent(dbPath, {
+        event_type: 'appeal',
+        source_key: sourceKey,
+        event_date: item.counter_created_at || item.created_at || eventDate,
+        employee: row.executor,
+        category: row.category,
+        subject: row.claim_subject,
+        metadata: {
+          general_case_id: caseId,
+          kind: item.appeal_kind || item.kind || item.title || 'Обжалование',
+          event_date: item.date || item.event_date || item.appeal_date || '',
+          counter_id: item.counter_id || `legacy-${index + 1}`
+        }
+      });
+    }
+  }
+
+  const prefix = `appeal:${caseId}:%`;
+  if (sourceKeys.length) {
+    const placeholders = sourceKeys.map(() => '?').join(',');
+    await run(dbPath, `DELETE FROM report_event_ledger WHERE source_key LIKE ? AND source_key NOT IN (${placeholders})`, [prefix, ...sourceKeys]);
+  } else {
+    await run(dbPath, 'DELETE FROM report_event_ledger WHERE source_key LIKE ?', [prefix]);
+  }
+}
+
+async function registerHearing(dbPath, row = {}) {
+  const scheduleId = Number(row.id || row.schedule_id || 0);
+  if (!scheduleId || Number(row.is_date_row || 0) === 1) return;
+  await upsertEvent(dbPath, {
+    event_type: 'hearing',
+    source_key: `hearing:${scheduleId}`,
+    event_date: row.created_at || row.updated_at || row.session_date || row.hearing_date,
+    employee: row.representative || row.case_executor,
+    category: row.case_category || row.category,
+    subject: row.claim_subject || row.result,
+    metadata: {
+      schedule_id: scheduleId,
+      session_date: row.session_date || row.hearing_date || '',
+      court: row.court || '',
+      time: row.time || '',
+      general_case_id: Number(row.general_case_id || 0) || null
+    }
+  });
+}
+
+async function deleteHearing(dbPath, scheduleId) {
+  const id = Number(scheduleId || 0);
+  if (id) await run(dbPath, 'DELETE FROM report_event_ledger WHERE source_key=?', [`hearing:${id}`]);
+}
+
+async function deleteCaseEvents(dbPath, caseId) {
+  const id = Number(caseId || 0);
+  if (!id) return;
+  await run(dbPath, 'DELETE FROM general_case_extra_flags WHERE general_case_id=?', [id]);
+  await run(dbPath, `DELETE FROM report_event_ledger
+    WHERE source_key=? OR source_key LIKE ?
+      OR json_extract(COALESCE(metadata_json,'{}'),'$.general_case_id')=?`, [`case:${id}`, `appeal:${id}:%`, id]);
+}
+
 function reportQuarterMonths(year, quarter) {
   const startMonth = ((Number(quarter) || 1) - 1) * 3;
   return [0, 1, 2].map(offset => {
@@ -432,15 +515,7 @@ async function saveFlag(dbPath, caseId, value) {
   const row = await get(dbPath, 'SELECT * FROM general_cases WHERE id=?', [caseId])
     || await get(dbPath, 'SELECT * FROM general_cases_archive WHERE source_id=? ORDER BY id DESC LIMIT 1', [caseId]);
   if (row) {
-    await upsertEvent(dbPath, {
-      event_type: 'case',
-      source_key: `case:${caseId}`,
-      event_date: row.created_at || row.registration_date || row.archived_at,
-      employee: row.executor,
-      category: row.category,
-      subject: row.claim_subject,
-      metadata: caseMetadata(row, prosecutorFlag)
-    });
+    await syncCaseEvents(dbPath, row, prosecutorFlag);
   }
   return { general_case_id: caseId, prosecutor_claim_flag: prosecutorFlag };
 }
@@ -451,6 +526,10 @@ module.exports = {
   all,
   get,
   registerEvent: upsertEvent,
+  syncCaseEvents,
+  registerHearing,
+  deleteHearing,
+  deleteCaseEvents,
   summary,
   getFlags,
   saveFlag,

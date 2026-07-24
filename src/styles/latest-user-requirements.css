@@ -6,17 +6,32 @@
 #calendar [data-calendar-executor-control] select:hover { border-color:#8caef2; background:#f8fbff; }
 #calendar [data-calendar-executor-control] select:focus { outline:none; border-color:#2e5bd3; box-shadow:0 0 0 3px rgba(46,91,211,.12); }
 
-/* Calendar dialog: executor, date and time on one compact row. */
+/* Calendar dialog: date and time span the dialog width. */
 #calendar .calendar-main-time-row {
-  grid-template-columns: minmax(220px, 1fr) 164px 118px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
   align-items:end;
+  justify-content:stretch;
   gap:12px;
 }
 #calendar .calendar-main-time-row[hidden],
-#calendar .calendar-main-time-row [data-calendar-field="executor"][hidden],
 #calendar .calendar-main-time-row [data-calendar-field="date"][hidden],
 #calendar .calendar-main-time-row [data-calendar-field="time"][hidden] {
   display:grid !important;
+}
+#calendar [data-calendar-task-form][data-assignment-mode="1"] [data-calendar-field="executor"] {
+  display:grid !important;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+#calendar [data-calendar-case-fields] [data-calendar-field="executor"] {
+  display:grid;
+  gap:6px;
+}
+#calendar [data-calendar-case-fields] [data-calendar-field="executor"] select {
+  width:100%;
+  min-height:40px;
+  height:40px;
+  box-sizing:border-box;
 }
 #calendar .calendar-main-time-row label {
   min-width:0;

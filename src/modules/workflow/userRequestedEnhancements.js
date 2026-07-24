@@ -22,10 +22,13 @@ export function initUserRequestedEnhancements() {
   document.addEventListener('change', scheduleEnhance, true);
   document.addEventListener('input', scheduleEnhance, true);
   window.addEventListener('app:view-changed', scheduleEnhance);
+  window.addEventListener('calendar:updated', scheduleEnhance);
+  window.addEventListener('general-cases:updated', scheduleEnhance);
+  window.addEventListener('controlled-cases:updated', scheduleEnhance);
+  window.addEventListener('schedule:updated', scheduleEnhance);
+  window.addEventListener('emergency:updated', scheduleEnhance);
+  window.addEventListener('registry:updated', scheduleEnhance);
   window.addEventListener('reports:reload', scheduleEnhance);
-
-  const observer = new MutationObserver(scheduleEnhance);
-  observer.observe(document.body, { childList: true, subtree: true });
   scheduleEnhance();
 }
 

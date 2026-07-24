@@ -7,8 +7,6 @@ const MARK_NAMES = new Set([
   'prosecutor_claim_flag'
 ]);
 
-let observer;
-
 function decorateMark(input) {
   if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') return;
   if (!MARK_NAMES.has(String(input.name || ''))) return;
@@ -46,7 +44,8 @@ export function initGeneralCaseUiPolish() {
     }
   }, true);
 
-  observer = new MutationObserver(scan);
-  observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('app:view-changed', scan);
+  window.addEventListener('general-cases:updated', scan);
+  window.addEventListener('general-cases:open-case', () => setTimeout(scan, 0));
   scan();
 }

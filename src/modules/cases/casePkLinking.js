@@ -279,15 +279,6 @@ export function initCasePkLinking() {
       skip_linked: true
     });
 
-    if (linked && !syncing) {
-      syncing = true;
-      try {
-        await originals.updateControlledCase(linked.id, generalToControlled(saved, linked));
-      } finally {
-        syncing = false;
-      }
-    }
-
     await Promise.all([getGeneralRows(), getControlledRows()]);
     dispatchCaseReloads();
     return saved;
@@ -347,19 +338,6 @@ export function initCasePkLinking() {
       general_case_id: generalCaseId
     });
 
-    if (!syncing) {
-      syncing = true;
-      try {
-        await originals.updateGeneralCase(generalCaseId, {
-          ...controlledToGeneral(saved, general || {}),
-          case_no: external ? EXTERNAL_CASE_LABEL : (general?.case_no || ''),
-          skip_linked: true
-        });
-      } finally {
-        syncing = false;
-      }
-    }
-
     await Promise.all([getGeneralRows(), getControlledRows()]);
     dispatchCaseReloads();
     return saved;
@@ -369,8 +347,6 @@ export function initCasePkLinking() {
     if (lifecycleSyncing) return originals.archiveGeneralCase(id);
     lifecycleSyncing = true;
     try {
-      const linked = linkedControlledByGeneralId(await getControlledRows(), id);
-      if (linked) await originals.archiveControlledCase(linked.id);
       const result = await originals.archiveGeneralCase(id);
       dispatchCaseReloads();
       return result;
@@ -383,9 +359,7 @@ export function initCasePkLinking() {
     if (lifecycleSyncing) return originals.archiveControlledCase(id);
     lifecycleSyncing = true;
     try {
-      const row = findById(await getControlledRows(), id);
       const result = await originals.archiveControlledCase(id);
-      if (Number(row?.general_case_id || 0)) await originals.archiveGeneralCase(row.general_case_id);
       dispatchCaseReloads();
       return result;
     } finally {
@@ -400,21 +374,16 @@ export function initCasePkLinking() {
       const controlledArchive = (await dbApi.getArchivedControlledCases()).find(row => Number(row.id) === Number(archiveId));
       const controlledData = archiveData(controlledArchive);
       const oldGeneralId = Number(controlledData.general_case_id || 0);
-      let restoredGeneral = null;
-
       if (oldGeneralId) {
         const generalArchive = (await dbApi.getArchivedGeneralCases()).find(row => Number(row.source_id || 0) === oldGeneralId);
-        if (generalArchive) restoredGeneral = await originals.restoreGeneralCase(generalArchive.id);
+        if (generalArchive) {
+          const restoredGeneral = await originals.restoreGeneralCase(generalArchive.id);
+          await Promise.all([getGeneralRows(), getControlledRows()]);
+          dispatchCaseReloads();
+          return linkedControlledByGeneralId(controlledRowsCache, restoredGeneral.id);
+        }
       }
-
       const restoredControlled = await originals.restoreControlledCase(archiveId);
-      if (restoredGeneral?.id && restoredControlled?.id) {
-        await originals.updateControlledCase(restoredControlled.id, {
-          ...restoredControlled,
-          general_case_id: restoredGeneral.id,
-          case_number: isExternalCaseNumber(restoredGeneral.case_no) ? '' : restoredGeneral.case_no
-        });
-      }
       dispatchCaseReloads();
       return restoredControlled;
     } finally {
@@ -426,21 +395,8 @@ export function initCasePkLinking() {
     if (lifecycleSyncing) return originals.restoreGeneralCase(archiveId);
     lifecycleSyncing = true;
     try {
-      const generalArchive = (await dbApi.getArchivedGeneralCases()).find(row => Number(row.id) === Number(archiveId));
-      const oldGeneralId = Number(generalArchive?.source_id || 0);
-      const controlledArchive = (await dbApi.getArchivedControlledCases()).find(row => Number(archiveData(row).general_case_id || 0) === oldGeneralId);
       const restoredGeneral = await originals.restoreGeneralCase(archiveId);
-
-      if (controlledArchive && restoredGeneral?.id) {
-        const restoredControlled = await originals.restoreControlledCase(controlledArchive.id);
-        if (restoredControlled?.id) {
-          await originals.updateControlledCase(restoredControlled.id, {
-            ...restoredControlled,
-            general_case_id: restoredGeneral.id,
-            case_number: isExternalCaseNumber(restoredGeneral.case_no) ? '' : restoredGeneral.case_no
-          });
-        }
-      }
+      await Promise.all([getGeneralRows(), getControlledRows()]);
       dispatchCaseReloads();
       return restoredGeneral;
     } finally {

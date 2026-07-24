@@ -299,7 +299,7 @@ function renderEmergencyGeneralButton(row, variant = 'table') {
   const generalCaseId = Number(row?.general_case_id || 0);
   if (!generalCaseId) return '';
   const className = variant === 'card' ? 'btn small emergency-general-more' : 'btn small';
-  return `<button class="${className}" data-emergency-general-open="${generalCaseId}" type="button">Подробнее</button>`;
+  return `<button class="${className} more-dots-button" data-emergency-general-open="${generalCaseId}" type="button" title="Подробнее" aria-label="Подробнее"><span aria-hidden="true">•••</span></button>`;
 }
 
 function openLinkedGeneralCase(generalCaseId) {

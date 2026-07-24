@@ -124,6 +124,26 @@ select {
   min-width: 0;
 }
 
+.more-dots-button,
+.btn.more-dots-button {
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  border-radius: 13px !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+}
+
+.more-dots-button > span {
+  display: block;
+  transform: translateY(-2px);
+}
+
 @media (max-width: 768px) {
   .btn {
     white-space: normal;

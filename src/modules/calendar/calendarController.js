@@ -1,6 +1,7 @@
 ﻿import { dbApi } from '../../api/dbApi.js';
 import { showNotification } from '../../layout/notifications.js';
 import { getAuthSession, getCurrentUserName, isCurrentUserAdmin } from '../../auth/session.js';
+import { PERMISSIONS, hasPermission } from '../../core/permissions.js';
 
 const MONTHS = [
   '',
@@ -84,7 +85,7 @@ const TASK_VISIBLE_FIELDS = {
   [TASK_TYPE_HEARING]: ['court', 'subject', 'date', 'time'],
   [TASK_TYPE_DEADLINE]: ['court', 'subject', 'date', 'time', 'note_text'],
   [TASK_TYPE_RESPONSE]: ['court', 'subject', 'date', 'time', 'note_text'],
-  [TASK_TYPE_ASSIGNMENT]: ['court', 'subject', 'assignment', 'date', 'time'],
+  [TASK_TYPE_ASSIGNMENT]: ['executor', 'court', 'subject', 'assignment', 'date', 'time'],
   [TASK_TYPE_WORK_NOTE]: ['date', 'time', 'note_text'],
   [TASK_TYPE_OTHER]: ['date', 'time', 'desc', 'court', 'subject', 'assignment', 'note_text']
 };
@@ -130,7 +131,15 @@ let state = {
 const CALENDAR_EXECUTOR_STORAGE_PREFIX = 'legal-dashboard-calendar-executor-v1';
 
 function canChooseCalendarExecutor() {
-  return Number(getAuthSession()?.role_level || 0) >= 2;
+  const session = getAuthSession();
+  return Number(session?.role_level || 0) >= 2
+    || hasPermission(PERMISSIONS.TECH_ADMIN_ASSIGN, session);
+}
+
+function canCreateCalendarAssignments() {
+  const session = getAuthSession();
+  return Number(session?.role_level || 0) >= 3
+    || hasPermission(PERMISSIONS.TECH_ADMIN_ASSIGN, session);
 }
 
 function getCalendarExecutorStorageKey() {
@@ -157,6 +166,20 @@ function getSelectedCalendarExecutor() {
   return state.calendarExecutors.find(user => Number(user.id) === Number(state.selectedExecutorId)) || null;
 }
 
+function getCalendarExecutorById(id) {
+  return state.calendarExecutors.find(user => Number(user.id) === Number(id)) || null;
+}
+
+function getTaskOwnerExecutorId(task = null) {
+  const owner = getTaskUser(task);
+  if (!owner) return 0;
+  return Number(state.calendarExecutors.find(user => user.full_name === owner)?.id || 0) || 0;
+}
+
+function getCalendarFormSelectedType(form = document.querySelector('[data-calendar-task-form]')) {
+  return form?.querySelector('input[name="type"]:checked')?.value || form?.elements.type?.value || '';
+}
+
 function getCalendarViewLabel() {
   const currentUser = getCurrentUserName() || state.selectedUser || 'Администратор';
   const executor = getSelectedCalendarExecutor();
@@ -172,6 +195,8 @@ function getTaskExecutorLabel(task) {
 export function initCalendarPage() {
   if (state.initialized) return;
   state.initialized = true;
+
+  document.addEventListener('click', handleCalendarAssignmentButtonClick, true);
 
   document.addEventListener('click', event => {
     if (event.target.closest('[data-calendar-prev]')) changeMonth(-1);
@@ -551,6 +576,19 @@ window.addEventListener('app:view-changed', event => {
   bootstrapCalendar();
 }
 
+function handleCalendarAssignmentButtonClick(event) {
+  const assignmentButton = event.target.closest?.('[data-calendar-open-assignment]');
+  if (!assignmentButton) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!canCreateCalendarAssignments()) {
+    showNotification('Поручения может создавать только главный администратор или технический администратор.', 'error');
+    return;
+  }
+  window.openView?.('calendar');
+  void openNewAssignmentTaskForm();
+}
+
 async function bootstrapCalendar() {
   await loadUsers();
   await loadCourts();
@@ -621,6 +659,44 @@ function syncUserSelects() {
 
   pageSelect.innerHTML = options;
   pageSelect.value = String(state.selectedExecutorId || 0);
+}
+
+function populateCalendarTaskOwnerSelect(form = document.querySelector('[data-calendar-task-form]'), task = null) {
+  const select = form?.querySelector('[data-calendar-task-owner]');
+  if (!select) return;
+
+  syncCalendarTaskOwnerFieldUi(form);
+  const currentText = select.selectedOptions?.[0]?.textContent?.trim() || select.value || '';
+  const currentId = Number(select.value || 0)
+    || getTaskOwnerExecutorId(task)
+    || state.selectedExecutorId
+    || Number(state.calendarExecutors.find(user => user.full_name === currentText)?.id || 0)
+    || 0;
+  const options = ['<option value="">Выберите исполнителя</option>']
+    .concat(state.calendarExecutors.map(user => `<option value="${escapeHtml(String(user.id))}">${escapeHtml(user.full_name)}</option>`))
+    .join('');
+
+  select.innerHTML = options;
+  select.value = currentId ? String(currentId) : '';
+  select.disabled = !canCreateCalendarAssignments() || !state.calendarExecutors.length || Boolean(task?.id);
+}
+
+function syncCalendarTaskOwnerFieldUi(form = document.querySelector('[data-calendar-task-form]')) {
+  const field = form?.querySelector('[data-calendar-field="executor"]');
+  const label = field?.querySelector('span');
+  const select = field?.querySelector('[data-calendar-task-owner]');
+  if (label) label.textContent = 'Исполнитель';
+  if (select?.options?.[0]) select.options[0].textContent = 'Выберите исполнителя';
+  if (select) select.setAttribute('aria-label', 'Исполнитель поручения');
+}
+
+function getSelectedTaskOwnerExecutor(form = document.querySelector('[data-calendar-task-form]')) {
+  const select = form?.querySelector('[data-calendar-task-owner]');
+  const id = Number(select?.value || 0) || 0;
+  return getCalendarExecutorById(id)
+    || state.calendarExecutors.find(user => user.full_name === String(select?.value || '').trim())
+    || state.calendarExecutors.find(user => user.full_name === String(select?.selectedOptions?.[0]?.textContent || '').trim())
+    || null;
 }
 
 async function loadCalendarTasks() {
@@ -846,15 +922,30 @@ function getCalendarTaskOwner(task = null) {
   return getTaskUser(task) || getCurrentUserName() || state.selectedUser || 'Администратор';
 }
 
-function openNewTaskForm(dateOverride = null) {
+function openNewTaskForm(dateOverride = null, options = {}) {
   state.pendingGeneralCase = null;
   const targetDate = dateOverride || state.selectedDate || toIsoDate(new Date());
   state.selectedDate = targetDate;
   state.weekStartDate = getWeekRange(targetDate).start;
-  openTaskForm(null, targetDate);
+  openTaskForm(null, targetDate, options);
 }
 
-function openTaskForm(task = null, dateOverride = null) {
+async function openNewAssignmentTaskForm(dateOverride = null) {
+  if (canCreateCalendarAssignments() && !state.calendarExecutors.length) {
+    await loadUsers();
+    syncUserSelects();
+  }
+  openNewTaskForm(dateOverride, {
+    assignmentMode: true,
+    initialType: TASK_TYPE_ASSIGNMENT
+  });
+  const form = document.querySelector('[data-calendar-task-form]');
+  if (!form) return;
+
+  maybeAskToLinkGeneralCaseForType(TASK_TYPE_ASSIGNMENT);
+}
+
+function openTaskForm(task = null, dateOverride = null, options = {}) {
   const dialog = document.querySelector('[data-calendar-task-dialog]');
   const form = document.querySelector('[data-calendar-task-form]');
   if (!dialog || !form) return;
@@ -867,6 +958,8 @@ function openTaskForm(task = null, dateOverride = null) {
   state.selectedTask = task || null;
   if (task) state.pendingGeneralCase = null;
   state.createOnDateMode = !task;
+  const assignmentMode = !task && Boolean(options.assignmentMode);
+  form.dataset.assignmentMode = assignmentMode ? '1' : '';
   form.reset();
   clearCalendarFormError();
   setTaskFormSaving(form, false);
@@ -874,7 +967,9 @@ function openTaskForm(task = null, dateOverride = null) {
   const storedScope = String(task?.event_scope || '');
   const scope = getTaskScope(task) === 'personal' ? 'personal' : 'work';
   const rawType = getTaskType(task);
-  let type = '';
+  let type = assignmentMode && options.initialType === TASK_TYPE_ASSIGNMENT
+    ? TASK_TYPE_ASSIGNMENT
+    : '';
   if (task && scope === 'work') {
     if (storedScope === 'note' || rawType === TASK_TYPE_WORK_NOTE) {
       type = TASK_TYPE_WORK_NOTE;
@@ -915,9 +1010,14 @@ function openTaskForm(task = null, dateOverride = null) {
   if (linkButton) linkButton.hidden = true;
   if (moreButton) {
     moreButton.hidden = !task?.id || !hasLink;
-    moreButton.textContent = 'Подробнее';
+    moreButton.classList.add('more-dots-button');
+    moreButton.innerHTML = '<span aria-hidden="true">•••</span>';
+    moreButton.title = 'Подробнее';
+    moreButton.setAttribute('aria-label', 'Подробнее');
   }
 
+  populateCalendarTaskOwnerSelect(form, task);
+  syncCalendarAssignmentTypeAvailability(form);
   if (state.pendingGeneralCase && !task) applyGeneralCaseToTaskForm(form, state.pendingGeneralCase);
   syncCalendarScopeUi();
   syncCalendarFormLinkButton();
@@ -927,6 +1027,8 @@ function openTaskForm(task = null, dateOverride = null) {
 function closeTaskForm() {
   state.pendingGeneralCase = null;
   state.createOnDateMode = false;
+  const form = document.querySelector('[data-calendar-task-form]');
+  if (form) form.dataset.assignmentMode = '';
   document.querySelector('[data-calendar-task-dialog]')?.close();
 }
 
@@ -970,7 +1072,7 @@ function syncCalendarSubmitState(form = document.querySelector('[data-calendar-t
   const submit = form.querySelector('button[type="submit"]');
   if (!submit) return;
   const scope = form.elements.event_scope?.value === 'personal' ? 'personal' : 'work';
-  const selectedType = form.elements.type?.value || '';
+  const selectedType = getCalendarFormSelectedType(form);
   submit.disabled = scope === 'work' && !selectedType;
 }
 
@@ -1025,14 +1127,27 @@ async function saveTask(form) {
     return;
   }
 
-  const selectedType = form.elements.type.value || '';
+  const selectedType = getCalendarFormSelectedType(form);
   if (scope === 'work' && !WORK_TASK_TYPES.includes(selectedType)) {
     showCalendarFormError('Выберите тип записи');
     return;
   }
+  const assignmentExecutor = scope === 'work' && selectedType === TASK_TYPE_ASSIGNMENT && !existingTask
+    ? getSelectedTaskOwnerExecutor(form)
+    : null;
+  if (scope === 'work' && selectedType === TASK_TYPE_ASSIGNMENT && !existingTask) {
+    if (!canCreateCalendarAssignments()) {
+      showCalendarFormError('Поручения может создавать только главный администратор или технический администратор.');
+      return;
+    }
+    if (!assignmentExecutor?.id) {
+      showCalendarFormError('Выберите исполнителя поручения.');
+      return;
+    }
+  }
   const type = scope === 'personal' ? TASK_TYPE_PERSONAL : selectedType;
   const rawNote = form.elements.note_text.value.trim();
-  const owner = existingTask ? getCalendarTaskOwner(existingTask) : (currentUserName || state.selectedUser || 'Администратор');
+  const owner = existingTask ? getCalendarTaskOwner(existingTask) : (assignmentExecutor?.full_name || currentUserName || state.selectedUser || 'Администратор');
   const defaultTitle = scope === 'personal' ? personalKind : getTaskDisplayLabel({ type, task_type: type });
   const isOtherType = scope !== 'personal' && selectedType === TASK_TYPE_OTHER;
   const isApplicableField = name => {
@@ -1067,10 +1182,13 @@ async function saveTask(form) {
     done: form.elements.id.value ? (existingTask?.done || 0) : 0,
     meeting_id: existingTask?.meeting_id || null,
     general_case_id: scope === 'personal' ? null : (state.pendingGeneralCase?.id || existingTask?.general_case_id || null),
+    schedule_id: scope === 'personal' ? null : (existingTask?.schedule_id || null),
     delegated_to: existingTask?.delegated_to || '',
     delegated_by: existingTask?.delegated_by || '',
     delegation_status: existingTask?.delegation_status || '',
-    delegation_source_event_id: existingTask?.delegation_source_event_id || null
+    delegation_source_event_id: existingTask?.delegation_source_event_id || null,
+    executor_id: assignmentExecutor?.id || null,
+    executor_name: assignmentExecutor?.full_name || ''
   };
 
   let conflictDecision = { confirmed: true, delegatedTo: '', conflicts: [] };
@@ -1115,6 +1233,10 @@ async function saveTask(form) {
 
     state.selectedDate = data.date;
     state.weekStartDate = getWeekRange(data.date).start;
+    if (!data.id && assignmentExecutor?.id) {
+      state.selectedExecutorId = Number(assignmentExecutor.id);
+      saveCalendarExecutorSelection(state.selectedExecutorId);
+    }
     state.selectedUser = currentUserName;
     syncUserSelects();
     closeTaskForm();
@@ -1159,6 +1281,13 @@ function openCalendarCaseQuestionDialog() {
 
 function closeCalendarCaseQuestionDialog() {
   document.querySelector('[data-calendar-case-question-dialog]')?.close();
+  const form = document.querySelector('[data-calendar-task-form]');
+  if (form?.dataset.assignmentMode === '1') {
+    syncCalendarScopeUi();
+    syncCalendarFormLinkButton();
+  } else {
+    syncCalendarTaskOwnerFieldUi();
+  }
 }
 
 function confirmCalendarCaseQuestionDialog() {
@@ -1286,7 +1415,7 @@ function syncCalendarFormLinkButton() {
   if (!form || form.elements.event_scope?.value === 'personal') { linkButton.hidden = true; return; }
   const selected = state.pendingGeneralCase;
   const currentTask = state.selectedTask;
-  const selectedType = form.elements.type?.value || '';
+  const selectedType = getCalendarFormSelectedType(form);
   const hasLink = Boolean(selected?.id || currentTask?.general_case_id);
   linkButton.hidden = !hasLink && !isCaseLinkableCalendarType(selectedType);
   if (linkButton.hidden) return;
@@ -1682,7 +1811,8 @@ function calendarTaskPayload(task, overrides = {}) {
     conflict_override: overrides.conflict_override ?? task?.conflict_override ?? 0,
     done: overrides.done ?? task?.done ?? 0,
     meeting_id: overrides.meeting_id ?? task?.meeting_id ?? null,
-    general_case_id: overrides.general_case_id ?? task?.general_case_id ?? null
+    general_case_id: overrides.general_case_id ?? task?.general_case_id ?? null,
+    schedule_id: overrides.schedule_id ?? task?.schedule_id ?? null
   };
 }
 
@@ -2141,7 +2271,8 @@ async function moveCalendarTaskToDate(taskId, targetDate, time) {
     conflict_override: task.conflict_override || 0,
     done: task.done || 0,
     meeting_id: task.meeting_id || null,
-    general_case_id: task.general_case_id || null
+    general_case_id: task.general_case_id || null,
+    schedule_id: task.schedule_id || null
   };
 
   try {
@@ -2289,11 +2420,23 @@ function syncCalendarOtherFields(isOther) {
   });
 }
 
+function syncCalendarAssignmentTypeAvailability(form = document.querySelector('[data-calendar-task-form]')) {
+  const input = form?.querySelector('[name="type"][value="' + TASK_TYPE_ASSIGNMENT + '"]');
+  if (!input) return;
+  const currentTaskIsAssignment = Boolean(state.selectedTask?.id && getTaskType(state.selectedTask) === TASK_TYPE_ASSIGNMENT);
+  const available = canCreateCalendarAssignments() || currentTaskIsAssignment;
+  input.disabled = !available;
+  input.closest('label')?.toggleAttribute('hidden', !available);
+  if (!available && input.checked) input.checked = false;
+}
+
 function syncCalendarScopeUi() {
   const form = document.querySelector('[data-calendar-task-form]');
   if (!form) return;
+  syncCalendarAssignmentTypeAvailability(form);
+  syncCalendarTaskOwnerFieldUi(form);
   const scope = form.elements.event_scope?.value === 'personal' ? 'personal' : 'work';
-  const selectedType = form.elements.type?.value || '';
+  const selectedType = getCalendarFormSelectedType(form);
   const isPersonal = scope === 'personal';
   const isOther = !isPersonal && selectedType === TASK_TYPE_OTHER;
   const workTypes = document.querySelector('[data-calendar-work-fields]');
@@ -2307,7 +2450,7 @@ function syncCalendarScopeUi() {
   if (privacyHint) privacyHint.hidden = !isPersonal;
   if (noteLabel) noteLabel.textContent = isPersonal ? 'Приватная заметка' : 'Заметка / напоминание';
 
-  const configurableFields = ['date', 'time', 'desc', 'court', 'subject', 'assignment', 'note_text'];
+  const configurableFields = ['executor', 'date', 'time', 'desc', 'court', 'subject', 'assignment', 'note_text'];
   const visibleFields = isPersonal ? ['note_text'] : (TASK_VISIBLE_FIELDS[selectedType] || []);
 
   if (isOther) {
@@ -2321,6 +2464,7 @@ function syncCalendarScopeUi() {
   if (caseFields) {
     caseFields.hidden = !['court', 'subject', 'assignment'].some(name => visibleFields.includes(name));
   }
+  setCalendarFieldVisible('executor', !isPersonal && selectedType === TASK_TYPE_ASSIGNMENT && canCreateCalendarAssignments() && !state.selectedTask?.id);
 
   if (linkButton) linkButton.hidden = true;
   syncCalendarFormLinkButton();

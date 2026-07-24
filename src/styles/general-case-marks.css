@@ -83,6 +83,10 @@
   color:#15803d !important;
 }
 
+#cases .general-case-cancel-button[hidden] {
+  display: none !important;
+}
+
 #cases .case-dialog-active-dot.is-cancelled,
 #cases .case-badge.cancelled {
   background:#fee2e2 !important;

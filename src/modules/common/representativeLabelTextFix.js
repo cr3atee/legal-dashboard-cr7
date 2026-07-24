@@ -58,6 +58,7 @@ function replaceTextNodes(root) {
       const parent = node.parentElement;
       if (!parent) return NodeFilter.FILTER_REJECT;
       if (parent.closest('script, style, textarea, input')) return NodeFilter.FILTER_REJECT;
+      if (parent.closest('#calendar [data-calendar-field="executor"], #calendar [data-calendar-task-owner]')) return NodeFilter.FILTER_REJECT;
       return hasExecutorLabel(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     }
   });
@@ -81,6 +82,7 @@ function replaceAttributes(root) {
   nodes.push(...root.querySelectorAll?.(selector) || []);
 
   nodes.forEach(node => {
+    if (node.closest?.('#calendar [data-calendar-field="executor"], #calendar [data-calendar-task-owner]')) return;
     ['placeholder', 'title', 'aria-label', 'data-label'].forEach(attribute => {
       const value = node.getAttribute(attribute);
       if (hasExecutorLabel(value)) node.setAttribute(attribute, replaceExecutorText(value));

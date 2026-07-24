@@ -183,7 +183,6 @@
             </fieldset>
 
             <div class="calendar-form-grid calendar-main-time-row">
-              <label class="calendar-executor-field" data-calendar-field="executor"><span>Исполнитель</span><select name="executor" data-calendar-task-owner><option value="">Не выбран</option></select></label>
               <label class="calendar-date-field" data-calendar-field="date"><span>Дата</span><input name="date" type="text" data-calendar-date-text inputmode="numeric" maxlength="10" placeholder="ДД.ММ.ГГГГ" autocomplete="off" required></label>
               <label class="calendar-time-field" data-calendar-field="time"><span>Время</span><input name="time" data-calendar-time maxlength="5" placeholder="ЧЧ:ММ" autocomplete="off"></label>
             </div>
@@ -194,6 +193,7 @@
               <label data-calendar-field="court"><span>Суд</span><input name="court" list="calendarCourtsList" autocomplete="off"></label>
               <label data-calendar-field="subject"><span>Предмет</span><input name="subject" autocomplete="off"></label>
               <label class="calendar-full-field" data-calendar-field="assignment"><span>Поручение</span><input name="assignment" autocomplete="off"></label>
+              <label class="calendar-executor-field" data-calendar-field="executor"><span>Исполнитель</span><select name="executor" data-calendar-task-owner><option value="">Выберите исполнителя</option></select></label>
             </div>
 
             <label class="calendar-full-field" data-calendar-field="note_text"><span data-calendar-note-label>Заметка / напоминание</span><textarea name="note_text" rows="3"></textarea></label>
@@ -206,7 +206,7 @@
           <div class="calendar-dialog-actions calendar-task-dialog-actions">
             <div class="calendar-dialog-left-actions">
               <button class="btn" data-calendar-form-link type="button" hidden>Связать с общим перечнем</button>
-              <button class="btn" data-calendar-form-more type="button" hidden>Подробнее</button>
+              <button class="btn more-dots-button" data-calendar-form-more type="button" title="Подробнее" aria-label="Подробнее" hidden><span aria-hidden="true">•••</span></button>
             </div>
             <div class="calendar-dialog-right-actions">
               <button class="btn danger calendar-delete-icon-btn" data-calendar-delete type="button" title="Удалить событие" aria-label="Удалить событие" hidden>
@@ -253,7 +253,7 @@
           <button class="icon-button" data-calendar-detail-close type="button">×</button>
         </div>
         <div class="calendar-detail-body" data-calendar-detail-body></div>
-        <div class="calendar-dialog-actions"><button class="btn" data-calendar-detail-more type="button" hidden>Подробнее</button><button class="btn danger" data-calendar-detail-delete type="button" hidden>Удалить</button><button class="btn primary" data-calendar-detail-close type="button">Закрыть</button></div>
+        <div class="calendar-dialog-actions"><button class="btn more-dots-button" data-calendar-detail-more type="button" title="Подробнее" aria-label="Подробнее" hidden><span aria-hidden="true">•••</span></button><button class="btn danger" data-calendar-detail-delete type="button" hidden>Удалить</button><button class="btn primary" data-calendar-detail-close type="button">Закрыть</button></div>
       </dialog>
 
       <dialog class="calendar-plan-dialog" data-calendar-plan-dialog>

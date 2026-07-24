@@ -1721,7 +1721,7 @@ function renderRelatedOpenButton(row, variant = 'card') {
   const destinations = getGeneralRelatedDestinations(row);
   if (!destinations.length || state.archived) return '';
   if (variant === 'table') {
-    return `<button class="btn small general-related-open-table" data-general-related-open="${row.id}" type="button">Подробнее</button>`;
+    return `<button class="btn small general-related-open-table more-dots-button" data-general-related-open="${row.id}" type="button" title="Подробнее" aria-label="Подробнее"><span aria-hidden="true">•••</span></button>`;
   }
   return `<button class="general-related-open-card general-card-dots-button" data-general-related-open="${row.id}" type="button" title="Подробнее" aria-label="Подробнее"><span aria-hidden="true">•••</span></button>`;
 }

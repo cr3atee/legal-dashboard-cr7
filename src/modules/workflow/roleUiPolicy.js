@@ -1,4 +1,5 @@
 import { getAuthSession } from '../../auth/session.js';
+import { hasPermission, PERMISSIONS } from '../../core/permissions.js';
 
 let initialized = false;
 
@@ -7,11 +8,19 @@ export function initRoleUiPolicy() {
   initialized = true;
 
   const apply = () => {
-    const participant = Number(getAuthSession()?.role_level || 0) === 1;
+    const roleLevel = Number(getAuthSession()?.role_level || 0);
+    const participant = roleLevel === 1;
+    const canCreateAssignments = roleLevel >= 3
+      || hasPermission(PERMISSIONS.TECH_ADMIN_ASSIGN);
 
     document.querySelectorAll('#cases [data-general-new], #cases [data-general-add], #cases .general-case-add-button').forEach(button => {
       button.hidden = participant;
       button.disabled = participant;
+    });
+
+    document.querySelectorAll('[data-calendar-open-assignment]').forEach(button => {
+      button.hidden = !canCreateAssignments;
+      button.disabled = !canCreateAssignments;
     });
 
     const day = document.querySelector('#reports [data-reports-mode][value="day"]');
@@ -29,5 +38,6 @@ export function initRoleUiPolicy() {
 
   apply();
   window.addEventListener('app:view-changed', apply);
-  new MutationObserver(apply).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('general-cases:updated', apply);
+  window.addEventListener('reports:reload', apply);
 }

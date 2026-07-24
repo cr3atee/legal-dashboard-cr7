@@ -11,6 +11,98 @@
   align-items: center;
 }
 
+/* Keep the event editor compact at desktop zoom levels. */
+#calendar .calendar-task-dialog {
+  width: min(680px, calc(100vw - 28px));
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-head {
+  padding: 14px 18px;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-head h3 {
+  font-size: 18px !important;
+  line-height: 1.2;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-head p {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+#calendar .calendar-task-dialog .icon-button {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  font-size: 20px;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-body {
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+#calendar .calendar-task-dialog .calendar-task-type-section legend,
+#calendar .calendar-task-dialog .calendar-form-grid span,
+#calendar .calendar-task-dialog .calendar-full-field span {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+#calendar .calendar-task-dialog .calendar-task-types {
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 14px;
+}
+
+#calendar .calendar-task-dialog .calendar-task-types label {
+  gap: 8px;
+  min-height: 24px;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.2;
+}
+
+#calendar .calendar-task-dialog .calendar-task-types input[type="radio"] {
+  width: 16px;
+  height: 16px;
+}
+
+#calendar .calendar-task-dialog .calendar-task-types input[type="radio"]:checked {
+  border-color: #2455cf !important;
+  background: #2f6fe8 !important;
+  box-shadow: inset 0 0 0 4px #fff !important;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-body input,
+#calendar .calendar-task-dialog .calendar-dialog-body select,
+#calendar .calendar-task-dialog .calendar-dialog-body textarea,
+#calendar .calendar-task-dialog .calendar-main-time-row input,
+#calendar .calendar-task-dialog .calendar-main-time-row select {
+  font-size: 14px !important;
+}
+
+#calendar .calendar-task-dialog .calendar-main-time-row input,
+#calendar .calendar-task-dialog .calendar-main-time-row select {
+  height: 40px;
+  min-height: 40px;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-actions {
+  gap: 9px !important;
+  padding: 12px 18px 16px;
+}
+
+#calendar .calendar-task-dialog .calendar-dialog-actions .btn {
+  height: 42px;
+  min-height: 42px;
+  padding-inline: 14px;
+  border-radius: 13px;
+  font-size: 14px;
+}
+
 #calendar .calendar-personal-type-option {
   order: 99;
 }
@@ -23,12 +115,11 @@
 }
 
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
-  grid-template-columns: minmax(220px, 1fr) 164px 118px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
   justify-content: stretch;
   align-items: end;
 }
 
-#calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="executor"],
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="date"],
 #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] [data-calendar-field="time"] {
   display: grid !important;
@@ -76,27 +167,27 @@
 
 #calendar .calendar-more-dots-action,
 #calendar .calendar-inline-delete-action {
-  width: 58px !important;
-  min-width: 58px !important;
-  max-width: 58px !important;
-  height: 58px !important;
-  min-height: 58px !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
   padding: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  border-radius: 18px !important;
+  border-radius: 13px !important;
 }
 
 #calendar .calendar-more-dots-action {
-  font-size: 30px !important;
+  font-size: 20px !important;
   line-height: 1 !important;
   font-weight: 900 !important;
 }
 
 #calendar .calendar-inline-delete-action svg {
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 
 /* General cases table: action block with a narrow centered dots button and a right icon stack. */
@@ -200,6 +291,7 @@
 @media (max-width: 720px) {
   #calendar [data-calendar-task-form][data-calendar-personal-mode="1"] .calendar-main-time-row {
     grid-template-columns: 1fr !important;
+    justify-content: stretch;
   }
 
   #calendar .calendar-task-dialog-actions[data-calendar-actions-inline="1"] {

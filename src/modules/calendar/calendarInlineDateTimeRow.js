@@ -81,6 +81,7 @@ async function fixCalendarForm(mode = 'open') {
 }
 
 async function fillOwnerSelect(form) {
+  if (form?.dataset.assignmentMode === '1') return;
   const select = form.elements?.executor;
   if (!(select instanceof HTMLSelectElement)) return;
 
@@ -97,6 +98,7 @@ async function fillOwnerSelect(form) {
     ownersLoaded = true;
     owners = await loadOwners();
   }
+  if (form.dataset.assignmentMode === '1') return;
 
   const currentValue = select.value;
   const currentUser = getCurrentUserName() || '';
@@ -137,7 +139,7 @@ async function loadOwners() {
 }
 
 function keepDateTimeRowVisible(form) {
-  ['executor', 'date', 'time'].forEach(name => {
+  ['date', 'time'].forEach(name => {
     const node = form.querySelector(`[data-calendar-field="${name}"]`);
     if (node) node.hidden = false;
   });
@@ -160,6 +162,7 @@ function normalizeCalendarFormDateForSubmit(form) {
 
 function applyOwnerFromForm(data = {}) {
   const form = document.querySelector('[data-calendar-task-form]');
+  if (form?.dataset.assignmentMode === '1') return data;
   const selectedOwner = String(form?.elements?.executor?.value || '').trim();
   if (!selectedOwner) return data;
   return {

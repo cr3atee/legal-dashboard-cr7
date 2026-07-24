@@ -238,14 +238,12 @@ async function mergeCaseExtraFlags(rows = [], archived = false) {
 async function createGeneralCase(data) {
   const prepared = prepareCasePayload(data);
   const saved = await request('/api/general-cases', { method: 'POST', body: JSON.stringify(prepared.payload) });
-  await registerCaseMetrics(saved, prepared);
   return { ...saved, prosecutor_claim_flag: prepared.prosecutorClaim };
 }
 
 async function updateGeneralCase(id, data) {
   const prepared = prepareCasePayload({ ...data, id });
   const saved = await request(`/api/general-cases/${id}`, { method: 'PUT', body: JSON.stringify(prepared.payload) });
-  await registerCaseMetrics(saved, prepared);
   return { ...saved, prosecutor_claim_flag: prepared.prosecutorClaim };
 }
 
@@ -292,9 +290,7 @@ export const dbApi = {
   restoreGeneralCase: archiveId => request(`/api/general-cases/archive/${archiveId}/restore`, { method: 'POST' }),
   createControlledFromGeneral: (id, history_text = '') => request(`/api/general-cases/${id}/controlled-link`, { method: 'POST', body: JSON.stringify({ history_text }) }),
   addGeneralCaseAttendance: async (id, data) => {
-    const result = await request(`/api/general-cases/${id}/attendance-hearing`, { method: 'POST', body: JSON.stringify(data) });
-    await registerHearingMetric(result.schedule || {}, { ...data, general_case_id: id });
-    return result;
+    return request(`/api/general-cases/${id}/attendance-hearing`, { method: 'POST', body: JSON.stringify(data) });
   },
 
   getControlledCases: ({ search = '' } = {}) => request(`/api/controlled-cases${search ? `?search=${encodeURIComponent(search)}` : ''}`),
@@ -341,14 +337,10 @@ export const dbApi = {
   getCourtSchedule: () => request('/api/court-schedule'),
   createCourtScheduleDate: data => request('/api/court-schedule/date', { method: 'POST', body: JSON.stringify(data) }),
   createCourtScheduleCase: async data => {
-    const result = await request('/api/court-schedule/case', { method: 'POST', body: JSON.stringify(data) });
-    await registerHearingMetric(result, data);
-    return result;
+    return request('/api/court-schedule/case', { method: 'POST', body: JSON.stringify(data) });
   },
   updateCourtSchedule: async (id, data) => {
-    const result = await request(`/api/court-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    await registerHearingMetric(result, data);
-    return result;
+    return request(`/api/court-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) });
   },
   deleteCourtSchedule: id => request(`/api/court-schedule/${id}`, { method: 'DELETE' }),
 

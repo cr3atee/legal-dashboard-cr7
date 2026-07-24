@@ -142,13 +142,13 @@ function fixVisibleFields(form) {
   if (typeBlock) typeBlock.hidden = false;
 
   if (!personal) {
-    setFieldVisible(form, 'executor', true);
+    setFieldVisible(form, 'executor', form.dataset.assignmentMode === '1');
     setFieldVisible(form, 'date', true);
     setFieldVisible(form, 'time', true);
     return;
   }
 
-  setFieldVisible(form, 'executor', true);
+  setFieldVisible(form, 'executor', false);
   setFieldVisible(form, 'date', true);
   setFieldVisible(form, 'time', true);
   setFieldVisible(form, 'desc', false);

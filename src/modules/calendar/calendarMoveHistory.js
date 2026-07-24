@@ -136,7 +136,7 @@ async function loadUsers() {
 }
 
 function injectExecutor(form) {
-  if (!form || form.querySelector('[data-calendar-executor-field]')) return;
+  if (!form || form.querySelector('[data-calendar-executor-field], [data-calendar-task-owner]')) return;
   const dateInput = form.querySelector('[name="date"], [name="date_str"]');
   const anchor = dateInput?.closest('label, .form-field, .field') || dateInput?.parentElement;
   if (!anchor?.parentElement) return;

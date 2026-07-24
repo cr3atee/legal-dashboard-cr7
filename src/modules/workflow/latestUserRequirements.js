@@ -29,9 +29,12 @@ export function initLatestUserRequirements() {
     scheduleRefresh(80);
   });
   window.addEventListener('general-cases:updated', () => scheduleRefresh(180));
+  window.addEventListener('controlled-cases:updated', () => scheduleRefresh(180));
+  window.addEventListener('schedule:updated', () => scheduleRefresh(180));
+  window.addEventListener('emergency:updated', () => scheduleRefresh(180));
+  window.addEventListener('registry:updated', () => scheduleRefresh(180));
+  window.addEventListener('notifications:refresh', () => scheduleRefresh(180));
   window.addEventListener('reports:reload', () => scheduleRefresh(180));
-
-  new MutationObserver(() => scheduleRefresh(120)).observe(document.body, { childList: true, subtree: true });
 }
 
 function scheduleRefresh(delay = 100) {

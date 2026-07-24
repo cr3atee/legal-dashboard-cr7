@@ -1,8 +1,10 @@
-import { canUseAdminTools, getRoleName } from '../core/permissions.js';
+import { canUseAdminTools, getRoleName, hasPermission, PERMISSIONS } from '../core/permissions.js';
 
 export function renderTopbar(session = null) {
   const fullName = session?.full_name || session?.user || 'ФИО1';
   const showAdminTools = canUseAdminTools(session);
+  const canCreateAssignments = Number(session?.role_level || 0) >= 3
+    || hasPermission(PERMISSIONS.TECH_ADMIN_ASSIGN, session);
 
   return `
     <header class="topbar topbar-modern">
@@ -14,9 +16,11 @@ export function renderTopbar(session = null) {
       </div>
 
       <div class="topbar-user-zone">
-        <button class="topbar-assignments-btn" data-view="calendar" type="button" title="Поручения" aria-label="Поручения">
-          ${iconAssignments()}
-        </button>
+        ${canCreateAssignments ? `
+          <button class="topbar-assignments-btn" data-view="calendar" data-calendar-open-assignment type="button" title="Поручения" aria-label="Поручения">
+            ${iconAssignments()}
+          </button>
+        ` : ''}
 
         <button class="topbar-notify-btn" id="openNotificationsBtn" type="button" title="Уведомления">
           ${iconBell()}

@@ -814,7 +814,7 @@ async function saveCase(form) {
 
       await dbApi.createCourtScheduleDate({ session_date: data.hearing_date });
       const created = await dbApi.createCourtScheduleCase(movedData);
-      await addScheduleCaseToCalendar(data.hearing_date, movedData);
+      await addScheduleCaseToCalendar(data.hearing_date, { ...movedData, schedule_id: created.id });
       await dbApi.deleteCourtSchedule(data.id);
 
       state.selectedId = created.id;
@@ -831,7 +831,7 @@ async function saveCase(form) {
       showNotification('Дело обновлено');
     } else {
       const created = await dbApi.createCourtScheduleCase(data);
-      await addScheduleCaseToCalendar(data.session_date, data);
+      await addScheduleCaseToCalendar(data.session_date, { ...data, schedule_id: created.id });
       state.selectedId = created.id;
       state.selectedType = 'case';
       state.selectedSessionDate = normalizeRuDate(data.session_date) || data.session_date;
@@ -888,7 +888,8 @@ async function addScheduleCaseToCalendar(sessionDate, caseData) {
     ].join('\n'),
     done: 0,
     meeting_id: caseData.meeting_id || null,
-    general_case_id: caseData.general_case_id || null
+    general_case_id: caseData.general_case_id || null,
+    schedule_id: caseData.schedule_id || null
   };
 
   try {

@@ -82,8 +82,8 @@ function fixCalendarActionRow() {
   }
 
   if (moreButton) {
-    moreButton.classList.add('calendar-more-dots-action');
-    moreButton.textContent = '⋮';
+    moreButton.classList.add('calendar-more-dots-action', 'more-dots-button');
+    moreButton.innerHTML = '<span aria-hidden="true">•••</span>';
     moreButton.title = 'Подробнее';
     moreButton.setAttribute('aria-label', 'Подробнее');
   }

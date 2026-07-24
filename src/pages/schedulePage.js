@@ -144,7 +144,7 @@ export function renderSchedulePage() {
           </div>
 
           <div class="schedule-dialog-actions schedule-case-dialog-actions">
-            <button class="btn" data-schedule-case-more type="button" hidden>Подробнее</button>
+            <button class="btn more-dots-button" data-schedule-case-more type="button" title="Подробнее" aria-label="Подробнее" hidden><span aria-hidden="true">•••</span></button>
             <button class="btn danger" data-schedule-delete type="button" hidden>🗑️ Удалить</button>
             <span class="schedule-case-actions-spacer"></span>
             <button class="btn" data-schedule-case-close type="button">Отмена</button>
