@@ -10,6 +10,7 @@
     "build:map": "npm --prefix external/your-map-source run build && node scripts/sync-map-build.cjs",
     "preview": "vite preview",
     "desktop:dev": "npm run build && set ELECTRON_RUN_AS_NODE=& electron .",
+    "data:clear-cases": "node scripts/clear-case-data.cjs",
     "dist:win": "npm run build && electron-builder --win --x64",
     "dist:portable": "npm run build && electron-builder --win portable --x64",
     "dist:installer": "npm run build && electron-builder --win nsis --x64",
