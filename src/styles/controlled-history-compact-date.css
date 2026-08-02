@@ -1,43 +1,54 @@
+.controlled-history-header,
+.controlled-history-row,
 .controlled-history-row.controlled-history-row-compact {
-  position: relative;
-  grid-template-columns: 40px minmax(320px, 1fr) 120px 78px 116px 42px !important;
+  grid-template-columns: 40px minmax(360px, 1fr) 110px 160px 180px !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 10px !important;
 }
 
-.controlled-history-row-compact [data-history-note],
-.controlled-history-row-compact [data-history-type],
-.controlled-history-row-compact [data-history-time],
-.controlled-history-row-compact [data-history-date] {
+.controlled-history-row,
+.controlled-history-row.controlled-history-row-compact {
+  position: relative;
+}
+
+.controlled-history-row [data-history-note],
+.controlled-history-row [data-history-time],
+.controlled-history-row [data-history-date] {
   min-height: 36px !important;
   height: 36px !important;
   padding-top: 6px !important;
   padding-bottom: 6px !important;
   font-size: 13px !important;
-}
-
-.controlled-history-row-compact [data-history-note] {
-  width: 100% !important;
   min-width: 0 !important;
 }
 
-.controlled-history-row-compact [data-history-type] {
-  width: 120px !important;
-  min-width: 120px !important;
-  max-width: 120px !important;
-  padding-right: 30px !important;
+.controlled-history-row [data-history-note] {
+  grid-column: 2 !important;
+  width: 100% !important;
+  max-width: none !important;
 }
 
-.controlled-history-time-compact {
-  width: 78px !important;
-  min-width: 78px !important;
-  max-width: 78px !important;
+.controlled-history-row [data-history-time] {
+  grid-column: 3 !important;
+  width: 110px !important;
+  min-width: 110px !important;
+  max-width: 110px !important;
   text-align: center !important;
 }
 
-.controlled-history-date-compact {
-  max-width: 116px !important;
+.controlled-history-row [data-history-date] {
+  grid-column: 4 !important;
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
   text-align: center !important;
+}
+
+.controlled-history-row [data-history-pick-today] {
+  grid-column: 5 !important;
+  width: 180px !important;
+  min-width: 180px !important;
+  max-width: 180px !important;
 }
 
 .controlled-history-calendar-button {
@@ -64,43 +75,62 @@
 }
 
 @media (max-width: 1250px) {
+  .controlled-history-header,
+  .controlled-history-row,
   .controlled-history-row.controlled-history-row-compact {
-    grid-template-columns: 36px minmax(240px, 1fr) 104px 72px 110px 40px !important;
-    gap: 7px !important;
+    grid-template-columns: 36px minmax(260px, 1fr) 96px 140px 150px !important;
+    gap: 8px !important;
   }
 
-  .controlled-history-row-compact [data-history-type] {
-    width: 104px !important;
-    min-width: 104px !important;
-    max-width: 104px !important;
+  .controlled-history-row [data-history-time] {
+    width: 96px !important;
+    min-width: 96px !important;
+    max-width: 96px !important;
+  }
+
+  .controlled-history-row [data-history-date] {
+    width: 140px !important;
+    min-width: 140px !important;
+    max-width: 140px !important;
+  }
+
+  .controlled-history-row [data-history-pick-today] {
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
   }
 }
 
 @media (max-width: 900px) {
-  .controlled-history-row.controlled-history-row-compact {
-    grid-template-columns: 34px minmax(0, 1fr) 72px 110px 40px !important;
+  .controlled-history-header {
+    display: none !important;
   }
 
-  .controlled-history-row-compact [data-history-type] {
+  .controlled-history-row,
+  .controlled-history-row.controlled-history-row-compact {
+    grid-template-columns: 34px minmax(0, 1fr) 96px !important;
+  }
+
+  .controlled-history-row [data-history-note] {
     grid-column: 2 / -1 !important;
+    width: 100% !important;
+  }
+
+  .controlled-history-row [data-history-time] {
+    grid-column: 2 !important;
+  }
+
+  .controlled-history-row [data-history-date] {
+    grid-column: 3 !important;
     width: 100% !important;
     min-width: 0 !important;
     max-width: none !important;
   }
 
-  .controlled-history-row-compact [data-history-note] {
+  .controlled-history-row [data-history-pick-today] {
     grid-column: 2 / -1 !important;
-  }
-
-  .controlled-history-row-compact [data-history-time] {
-    grid-column: 3 !important;
-  }
-
-  .controlled-history-row-compact [data-history-date] {
-    grid-column: 4 !important;
-  }
-
-  .controlled-history-row-compact [data-history-pick-today] {
-    grid-column: 5 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
 }
