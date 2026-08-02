@@ -1,6 +1,6 @@
 .controlled-history-row.controlled-history-row-compact {
   position: relative;
-  grid-template-columns: 40px 160px minmax(180px, 1fr) 78px 116px 42px !important;
+  grid-template-columns: 40px minmax(320px, 1fr) 120px 78px 116px 42px !important;
   align-items: center !important;
   gap: 8px !important;
 }
@@ -16,11 +16,21 @@
   font-size: 13px !important;
 }
 
+.controlled-history-row-compact [data-history-note] {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
 .controlled-history-row-compact [data-history-type] {
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
   padding-right: 30px !important;
 }
 
 .controlled-history-time-compact {
+  width: 78px !important;
+  min-width: 78px !important;
   max-width: 78px !important;
   text-align: center !important;
 }
@@ -55,8 +65,14 @@
 
 @media (max-width: 1250px) {
   .controlled-history-row.controlled-history-row-compact {
-    grid-template-columns: 36px 142px minmax(160px, 1fr) 72px 110px 40px !important;
+    grid-template-columns: 36px minmax(240px, 1fr) 104px 72px 110px 40px !important;
     gap: 7px !important;
+  }
+
+  .controlled-history-row-compact [data-history-type] {
+    width: 104px !important;
+    min-width: 104px !important;
+    max-width: 104px !important;
   }
 }
 
@@ -67,6 +83,9 @@
 
   .controlled-history-row-compact [data-history-type] {
     grid-column: 2 / -1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
   }
 
   .controlled-history-row-compact [data-history-note] {
